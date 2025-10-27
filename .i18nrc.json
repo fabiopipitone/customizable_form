@@ -1,0 +1,7 @@
+{
+  "prefix": "customizableForm",
+  "paths": {
+    "customizableForm": "."
+  },
+  "translations": ["translations/ja-JP.json"]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "customizableForm",
+  "version": "1.0.0",
+  "kibanaVersion": "kibana",
+  "owner": {
+    "name": "Fabio Pipitone",
+    "githubTeam": ""
+  },
+  "description": "Customizable form-like visualization to make dashboards a bit more interactive",
+  "server": true,
+  "ui": true,
+  "requiredPlugins": ["navigation"],
+  "optionalPlugins": []
+}
