@@ -1,31 +1,40 @@
 import { i18n } from '@kbn/i18n';
-import type { AppMountParameters, CoreSetup, CoreStart, Plugin } from '@kbn/core/public';
+import {
+  type AppMountParameters,
+  type CoreSetup,
+  type CoreStart,
+  type Plugin,
+} from '@kbn/core/public';
 import type {
   CustomizableFormPluginSetup,
   CustomizableFormPluginStart,
   AppPluginStartDependencies,
+  CustomizableFormPluginSetupDependencies,
 } from './types';
-import { PLUGIN_NAME } from '../common';
+import { PLUGIN_ID, PLUGIN_NAME, PLUGIN_ROUTE } from '../common';
+import { customizableFormVisTypeAlias } from './vis_type_alias';
 
 export class CustomizableFormPlugin
   implements Plugin<CustomizableFormPluginSetup, CustomizableFormPluginStart>
 {
-  public setup(core: CoreSetup): CustomizableFormPluginSetup {
-    // Register an application into the side navigation menu
+  public setup(
+    core: CoreSetup<AppPluginStartDependencies>,
+    { visualizations }: CustomizableFormPluginSetupDependencies
+  ): CustomizableFormPluginSetup {
     core.application.register({
-      id: 'customizableForm',
+      id: PLUGIN_ID,
       title: PLUGIN_NAME,
+      appRoute: PLUGIN_ROUTE,
+      visibleIn: [],
       async mount(params: AppMountParameters) {
-        // Load application bundle
         const { renderApp } = await import('./application');
-        // Get start services as specified in kibana.json
         const [coreStart, depsStart] = await core.getStartServices();
-        // Render the application
-        return renderApp(coreStart, depsStart as AppPluginStartDependencies, params);
+        return renderApp(coreStart, depsStart, params);
       },
     });
 
-    // Return methods that should be available to other plugins
+    visualizations.registerAlias(customizableFormVisTypeAlias);
+
     return {
       getGreeting() {
         return i18n.translate('customizableForm.greetingText', {
