@@ -12,6 +12,8 @@ export interface FormFieldConfig {
 export interface FormConfig {
   title: string;
   description: string;
+  showTitle: boolean;
+  showDescription: boolean;
   connectorTypeId: string;
   connectorId: string;
   documentTemplate: string;

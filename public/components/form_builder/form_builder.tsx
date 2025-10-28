@@ -77,6 +77,8 @@ const INITIAL_CONFIG: FormConfig = {
     defaultMessage:
       'Define the inputs for the dashboard widget and map them to the connector payload.',
   }),
+  showTitle: true,
+  showDescription: true,
   connectorTypeId: '',
   connectorId: '',
   documentTemplate: DEFAULT_TEMPLATE,
@@ -116,6 +118,12 @@ const INITIAL_CONFIG: FormConfig = {
   ],
 };
 
+const buildInitialFieldValues = (fields: FormFieldConfig[]): Record<string, string> =>
+  fields.reduce<Record<string, string>>((acc, field) => {
+    acc[field.id] = '';
+    return acc;
+  }, {});
+
 const toConnectorTypeOptions = (types: Array<ActionType & { id: SupportedConnectorTypeId }>) =>
   types.map((type) => ({ value: type.id, text: type.name }));
 
@@ -124,6 +132,9 @@ const toConnectorOptions = (connectors: ActionConnector[]) =>
 
 interface PreviewContentProps {
   config: FormConfig;
+  fieldValues: Record<string, string>;
+  onFieldValueChange: (fieldId: string, value: string) => void;
+  isSubmitDisabled: boolean;
   onSubmit: () => void;
 }
 
@@ -144,14 +155,28 @@ const PanelHeader = ({ title }: { title: string }) => (
   </div>
 );
 
-const PreviewCard = ({ config, onSubmit }: PreviewContentProps) => (
+interface PreviewCardProps {
+  config: FormConfig;
+  fieldValues: Record<string, string>;
+  onFieldValueChange: (fieldId: string, value: string) => void;
+  isSubmitDisabled: boolean;
+  onSubmit: () => void;
+}
+
+const PreviewCard = ({ config, fieldValues, onFieldValueChange, isSubmitDisabled, onSubmit }: PreviewCardProps) => (
   <EuiPanel paddingSize="m" hasShadow hasBorder={false}>
     <PanelHeader
       title={i18n.translate('customizableForm.builder.previewPanelTitle', {
         defaultMessage: 'Preview',
       })}
     />
-    <PreviewContent config={config} onSubmit={onSubmit} />
+    <PreviewContent
+      config={config}
+      fieldValues={fieldValues}
+      onFieldValueChange={onFieldValueChange}
+      isSubmitDisabled={isSubmitDisabled}
+      onSubmit={onSubmit}
+    />
   </EuiPanel>
 );
 
@@ -170,6 +195,9 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
   const [connectorTypesError, setConnectorTypesError] = useState<string | null>(null);
   const [connectorsError, setConnectorsError] = useState<string | null>(null);
   const { toasts } = notifications;
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>(() =>
+    buildInitialFieldValues(INITIAL_CONFIG.fields)
+  );
 
   // Load connector types
   useEffect(() => {
@@ -347,16 +375,6 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
     setFormConfig((prev) => ({ ...prev, fields: [...prev.fields, newField] }));
   };
 
-  const handleTestSubmission = useCallback(() => {
-    // TODO: wire connector execution
-    console.log('Test submission triggered', {
-      connectorTypeId: formConfig.connectorTypeId,
-      connectorId: formConfig.connectorId,
-      template: formConfig.documentTemplate,
-      fields: formConfig.fields,
-    });
-  }, [formConfig]);
-
   const handleSaveVisualization = useCallback(() => {
     // TODO: replace with Kibana save modal integration
     console.log('Save visualization requested', formConfig);
@@ -376,6 +394,28 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
 
   const handleConnectorChange = useCallback((nextConnectorId: string) => {
     setFormConfig((prev) => (prev.connectorId === nextConnectorId ? prev : { ...prev, connectorId: nextConnectorId }));
+  }, []);
+
+  useEffect(() => {
+    setFieldValues((prev) => {
+      const next: Record<string, string> = {};
+      formConfig.fields.forEach((field) => {
+        next[field.id] = prev[field.id] ?? '';
+      });
+      return next;
+    });
+  }, [formConfig.fields]);
+
+  const handleFieldValueChange = useCallback((fieldId: string, value: string) => {
+    setFieldValues((prev) => {
+      if (prev[fieldId] === value) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [fieldId]: value,
+      };
+    });
   }, []);
 
   const connectorTypeOptions = useMemo(() => toConnectorTypeOptions(connectorTypes), [connectorTypes]);
@@ -400,6 +440,40 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
     [connectors, formConfig.connectorId]
   );
 
+  const isSubmitDisabled = useMemo(
+    () =>
+      formConfig.fields.some(
+        (field) => field.required && !(fieldValues[field.id]?.trim())
+      ),
+    [formConfig.fields, fieldValues]
+  );
+
+  const renderedPayload = useMemo(() => {
+    const valueMap = formConfig.fields.reduce<Record<string, string>>((acc, field) => {
+      if (field.key) {
+        acc[field.key.trim()] = fieldValues[field.id] ?? '';
+      }
+      return acc;
+    }, {});
+
+    return formConfig.documentTemplate.replace(/{{\s*([^{}\s]+)\s*}}/g, (_, variable: string) => {
+      return valueMap[variable] ?? '';
+    });
+  }, [formConfig.documentTemplate, formConfig.fields, fieldValues]);
+
+  const handleTestSubmission = useCallback(() => {
+    // TODO: wire connector execution
+    console.log('Test submission triggered', {
+      connectorTypeId: formConfig.connectorTypeId,
+      connectorId: formConfig.connectorId,
+      payload: renderedPayload,
+      fields: formConfig.fields.reduce<Record<string, string>>((acc, field) => {
+        acc[field.id] = fieldValues[field.id] ?? '';
+        return acc;
+      }, {}),
+    });
+  }, [formConfig.connectorId, formConfig.connectorTypeId, formConfig.fields, fieldValues, renderedPayload]);
+
   return (
     <div
       style={{
@@ -411,30 +485,38 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
     >
       <EuiFlexGroup gutterSize="m" alignItems="stretch">
         <EuiFlexItem grow={4}>
-          <EuiFlexGroup direction="column" gutterSize="m">
-            <EuiFlexItem grow={false}>
-              <PreviewCard config={formConfig} onSubmit={handleTestSubmission} />
-            </EuiFlexItem>
-            <EuiFlexItem grow={false}>
-                <InfoPanel
+            <EuiFlexGroup direction="column" gutterSize="m">
+              <EuiFlexItem grow={false}>
+                <PreviewCard
                   config={formConfig}
+                  fieldValues={fieldValues}
+                  onFieldValueChange={handleFieldValueChange}
+                  isSubmitDisabled={isSubmitDisabled}
+                  onSubmit={handleTestSubmission}
+                />
+              </EuiFlexItem>
+              <EuiFlexItem grow={false}>
+                <InfoPanel
                   selectedConnectorType={selectedConnectorType}
                   selectedConnector={selectedConnector}
+                  payloadPreview={renderedPayload}
                 />
-            </EuiFlexItem>
-          </EuiFlexGroup>
+              </EuiFlexItem>
+            </EuiFlexGroup>
         </EuiFlexItem>
 
-        <EuiFlexItem grow={2}>
-          <ConfigurationPanel
-            config={formConfig}
-            onTitleChange={(v) => updateConfig({ title: v })}
-            onDescriptionChange={(v) => updateConfig({ description: v })}
-            onConnectorTypeChange={handleConnectorTypeChange}
-            onConnectorChange={handleConnectorChange}
-            onTemplateChange={(v) => updateConfig({ documentTemplate: v })}
-            onFieldChange={updateField}
-            onFieldRemove={removeField}
+          <EuiFlexItem grow={2}>
+            <ConfigurationPanel
+              config={formConfig}
+              onTitleChange={(v) => updateConfig({ title: v })}
+              onDescriptionChange={(v) => updateConfig({ description: v })}
+              onShowTitleChange={(show) => updateConfig({ showTitle: show })}
+              onShowDescriptionChange={(show) => updateConfig({ showDescription: show })}
+              onConnectorTypeChange={handleConnectorTypeChange}
+              onConnectorChange={handleConnectorChange}
+              onTemplateChange={(v) => updateConfig({ documentTemplate: v })}
+              onFieldChange={updateField}
+              onFieldRemove={removeField}
             onAddField={addField}
             onSave={handleSaveVisualization}
             connectorTypeOptions={connectorTypeOptions}
@@ -454,6 +536,8 @@ interface ConfigurationPanelProps {
   config: FormConfig;
   onTitleChange: (value: string) => void;
   onDescriptionChange: (value: string) => void;
+  onShowTitleChange: (value: boolean) => void;
+  onShowDescriptionChange: (value: boolean) => void;
   onConnectorTypeChange: (value: string) => void;
   onConnectorChange: (value: string) => void;
   onTemplateChange: (value: string) => void;
@@ -473,6 +557,8 @@ const ConfigurationPanel = ({
   config,
   onTitleChange,
   onDescriptionChange,
+  onShowTitleChange,
+  onShowDescriptionChange,
   onConnectorTypeChange,
   onConnectorChange,
   onTemplateChange,
@@ -532,6 +618,22 @@ const ConfigurationPanel = ({
 
       <EuiForm component="div">
         <EuiFormRow
+          label={i18n.translate('customizableForm.builder.showTitleToggleLabel', {
+            defaultMessage: 'Show form title',
+          })}
+          display="columnCompressed"
+          hasChildLabel={false}
+        >
+          <EuiSwitch
+            label={i18n.translate('customizableForm.builder.showTitleToggleSwitch', {
+              defaultMessage: 'Display title in preview',
+            })}
+            checked={config.showTitle}
+            onChange={(event) => onShowTitleChange(event.target.checked)}
+          />
+        </EuiFormRow>
+
+        <EuiFormRow
           label={i18n.translate('customizableForm.builder.formTitleLabel', {
             defaultMessage: 'Form title',
           })}
@@ -541,7 +643,24 @@ const ConfigurationPanel = ({
               defaultMessage: 'Form title',
             })}
             value={config.title}
+            disabled={!config.showTitle}
             onChange={(e) => onTitleChange(e.target.value)}
+          />
+        </EuiFormRow>
+
+        <EuiFormRow
+          label={i18n.translate('customizableForm.builder.showDescriptionToggleLabel', {
+            defaultMessage: 'Show description',
+          })}
+          display="columnCompressed"
+          hasChildLabel={false}
+        >
+          <EuiSwitch
+            label={i18n.translate('customizableForm.builder.showDescriptionToggleSwitch', {
+              defaultMessage: 'Display description in preview',
+            })}
+            checked={config.showDescription}
+            onChange={(event) => onShowDescriptionChange(event.target.checked)}
           />
         </EuiFormRow>
 
@@ -553,6 +672,7 @@ const ConfigurationPanel = ({
           <EuiTextArea
             resize="vertical"
             value={config.description}
+            disabled={!config.showDescription}
             onChange={(e) => onDescriptionChange(e.target.value)}
             aria-label={i18n.translate('customizableForm.builder.formDescriptionAria', {
               defaultMessage: 'Form description',
@@ -810,12 +930,12 @@ const ConfigurationPanel = ({
 };
 
 interface InfoPanelProps {
-  config: FormConfig;
   selectedConnectorType?: ActionType & { id: SupportedConnectorTypeId };
   selectedConnector?: ActionConnector & { actionTypeId: SupportedConnectorTypeId };
+  payloadPreview: string;
 }
 
-const InfoPanel = ({ config, selectedConnectorType, selectedConnector }: InfoPanelProps) => {
+const InfoPanel = ({ selectedConnectorType, selectedConnector, payloadPreview }: InfoPanelProps) => {
   const connectorName = selectedConnector
     ? selectedConnector.name
     : i18n.translate('customizableForm.builder.infoPanel.noConnector', {
@@ -861,22 +981,20 @@ const InfoPanel = ({ config, selectedConnectorType, selectedConnector }: InfoPan
             </strong>
             {connectorName}
           </EuiText>
-          <EuiText size="s">
-            <strong>
-              {i18n.translate('customizableForm.builder.infoPanel.typeLabel', {
-                defaultMessage: 'Type: ',
-              })}
-            </strong>
-            {connectorTypeLabel}
-          </EuiText>
-        </div>
+        <EuiText size="s">
+          <strong>
+            {i18n.translate('customizableForm.builder.infoPanel.typeLabel', {
+              defaultMessage: 'Type: ',
+            })}
+          </strong>
+          {connectorTypeLabel}
+        </EuiText>
+      </div>
+    </section>
 
-        <EuiSpacer size="m" />
-      </section>
+    <EuiSpacer size="m" />
 
-      <EuiSpacer size="m" />
-
-      <hr style={{ border: 'none', borderTop: '1px solid #d3dae6', margin: '8px 0 16px' }} />
+    <hr style={{ border: 'none', borderTop: '1px solid #d3dae6', margin: '8px 0 16px' }} />
 
       <section>
         <EuiTitle size="xs">
@@ -890,14 +1008,20 @@ const InfoPanel = ({ config, selectedConnectorType, selectedConnector }: InfoPan
         <EuiSpacer size="s" />
 
         <EuiCodeBlock language="json" isCopyable>
-          {config.documentTemplate}
+          {payloadPreview}
         </EuiCodeBlock>
       </section>
     </EuiPanel>
   );
 };
 
-const PreviewContent = ({ config, onSubmit }: PreviewContentProps) => {
+const PreviewContent = ({
+  config,
+  fieldValues,
+  onFieldValueChange,
+  isSubmitDisabled,
+  onSubmit,
+}: PreviewContentProps) => {
   const hasFields = config.fields.length > 0;
   const title = config.title?.trim()
     ? config.title
@@ -912,19 +1036,24 @@ const PreviewContent = ({ config, onSubmit }: PreviewContentProps) => {
           'Use the configuration panel to add fields, choose a connector and craft the payload.',
       });
 
+  const showTitle = config.showTitle !== false;
+  const showDescription = config.showDescription !== false;
+
   return (
     <>
-      <EuiTitle size="l">
-        <h1>{title}</h1>
-      </EuiTitle>
+      {showTitle ? (
+        <EuiTitle size="l">
+          <h1>{title}</h1>
+        </EuiTitle>
+      ) : null}
 
-      <EuiSpacer size="s" />
+      {showDescription ? (
+        <EuiText color="subdued">
+          <p>{description}</p>
+        </EuiText>
+      ) : null}
 
-      <EuiText color="subdued">
-        <p>{description}</p>
-      </EuiText>
-
-      <EuiSpacer size="m" />
+      {showTitle || showDescription ? <EuiSpacer size="m" /> : <EuiSpacer size="s" />}
 
       {hasFields ? (
         <EuiForm component="form" onSubmit={(event) => event.preventDefault()}>
@@ -932,6 +1061,17 @@ const PreviewContent = ({ config, onSubmit }: PreviewContentProps) => {
             <EuiFormRow
               key={field.id}
               label={field.label || field.key}
+              labelAppend={
+                <EuiText size="xs" color="subdued">
+                  {field.required
+                    ? i18n.translate('customizableForm.builder.previewFieldRequiredLabel', {
+                        defaultMessage: 'Required',
+                      })
+                    : i18n.translate('customizableForm.builder.previewFieldOptionalLabel', {
+                        defaultMessage: 'Optional',
+                      })}
+                </EuiText>
+              }
               helpText={
                 field.key
                   ? i18n.translate('customizableForm.builder.previewVariableInfo', {
@@ -942,16 +1082,26 @@ const PreviewContent = ({ config, onSubmit }: PreviewContentProps) => {
               }
             >
               {field.type === 'textarea' ? (
-                <EuiTextArea placeholder={field.placeholder} aria-label={field.label || field.key} />
+                <EuiTextArea
+                  placeholder={field.placeholder}
+                  aria-label={field.label || field.key}
+                  value={fieldValues[field.id] ?? ''}
+                  onChange={(event) => onFieldValueChange(field.id, event.target.value)}
+                />
               ) : (
-                <EuiFieldText placeholder={field.placeholder} aria-label={field.label || field.key} />
+                <EuiFieldText
+                  placeholder={field.placeholder}
+                  aria-label={field.label || field.key}
+                  value={fieldValues[field.id] ?? ''}
+                  onChange={(event) => onFieldValueChange(field.id, event.target.value)}
+                />
               )}
             </EuiFormRow>
           ))}
 
           <EuiSpacer size="m" />
 
-          <EuiButton fill iconType="play" onClick={onSubmit}>
+          <EuiButton fill iconType="play" onClick={onSubmit} disabled={isSubmitDisabled}>
             {i18n.translate('customizableForm.builder.previewSubmitButton', {
               defaultMessage: 'Submit',
             })}
