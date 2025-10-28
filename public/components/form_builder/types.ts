@@ -12,6 +12,7 @@ export interface FormFieldConfig {
 export interface FormConfig {
   title: string;
   description: string;
+  connectorTypeId: string;
   connectorId: string;
   documentTemplate: string;
   fields: FormFieldConfig[];

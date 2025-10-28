@@ -1,6 +1,13 @@
-import React, { ChangeEvent, useMemo, useRef, useState } from 'react';
+import React, {
+  ChangeEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { i18n } from '@kbn/i18n';
-import type { NotificationsStart } from '@kbn/core/public';
+import type { CoreStart, NotificationsStart } from '@kbn/core/public';
 import {
   EuiAccordion,
   EuiButton,
@@ -23,35 +30,39 @@ import {
   EuiTitle,
   EuiToolTip,
 } from '@elastic/eui';
+import { loadActionTypes, loadAllActions } from '@kbn/triggers-actions-ui-plugin/public/common/constants';
+import type { ActionType } from '@kbn/actions-types';
+import type { ActionConnector } from '@kbn/alerts-ui-shared/src/common/types';
+
 import { FormConfig, FormFieldConfig, FormFieldType } from './types';
 
 interface CustomizableFormBuilderProps {
   notifications: NotificationsStart;
+  http: CoreStart['http'];
 }
 
-const FIELD_TYPE_OPTIONS = [
-  {
-    value: 'text',
-    text: i18n.translate('customizableForm.builder.fieldType.text', {
-      defaultMessage: 'Single line text',
-    }),
-  },
-  {
-    value: 'textarea',
-    text: i18n.translate('customizableForm.builder.fieldType.textarea', {
-      defaultMessage: 'Multiline text',
-    }),
-  },
-];
+type SupportedConnectorTypeId = '.index' | '.webhook';
 
-const CONNECTOR_OPTIONS = [
-  {
-    value: 'index',
-    text: i18n.translate('customizableForm.builder.connector.index', {
-      defaultMessage: 'Index connector',
-    }),
-  },
-];
+const CONNECTOR_TYPE_CANONICAL: Record<string, SupportedConnectorTypeId> = {
+  '.index': '.index',
+  index: '.index',
+  '.webhook': '.webhook',
+  webhook: '.webhook',
+};
+
+const getCanonicalConnectorTypeId = (id?: string | null): SupportedConnectorTypeId | null => {
+  if (!id) return null;
+  return CONNECTOR_TYPE_CANONICAL[id] ?? null;
+};
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  if (error && typeof error === 'object') {
+    try { return JSON.stringify(error); } catch { return String(error); }
+  }
+  return String(error);
+};
 
 const DEFAULT_TEMPLATE = `{
   "event_timestamp": "{{timestamp}}",
@@ -67,7 +78,8 @@ const INITIAL_CONFIG: FormConfig = {
     defaultMessage:
       'Define the inputs for the dashboard widget and map them to the connector payload.',
   }),
-  connectorId: CONNECTOR_OPTIONS[0].value,
+  connectorTypeId: '',
+  connectorId: '',
   documentTemplate: DEFAULT_TEMPLATE,
   fields: [
     {
@@ -105,9 +117,168 @@ const INITIAL_CONFIG: FormConfig = {
   ],
 };
 
-export const CustomizableFormBuilder = ({ notifications }: CustomizableFormBuilderProps) => {
+const toConnectorTypeOptions = (types: Array<ActionType & { id: SupportedConnectorTypeId }>) =>
+  types.map((type) => ({ value: type.id, text: type.name }));
+
+const toConnectorOptions = (connectors: ActionConnector[]) =>
+  connectors.map((connector) => ({ value: connector.id, text: connector.name }));
+
+export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFormBuilderProps) => {
   const [formConfig, setFormConfig] = useState<FormConfig>(INITIAL_CONFIG);
   const fieldCounter = useRef<number>(INITIAL_CONFIG.fields.length);
+
+  const [connectorTypes, setConnectorTypes] = useState<
+    Array<ActionType & { id: SupportedConnectorTypeId }>
+  >([]);
+  const [connectors, setConnectors] = useState<
+    Array<ActionConnector & { actionTypeId: SupportedConnectorTypeId }>
+  >([]);
+  const [isLoadingConnectorTypes, setIsLoadingConnectorTypes] = useState(false);
+  const [isLoadingConnectors, setIsLoadingConnectors] = useState(false);
+  const [connectorTypesError, setConnectorTypesError] = useState<string | null>(null);
+  const [connectorsError, setConnectorsError] = useState<string | null>(null);
+  const { toasts } = notifications;
+
+  // Load connector types
+  useEffect(() => {
+    let isMounted = true;
+    const abortController = new AbortController();
+
+    const loadConnectorTypesFx = async () => {
+      setIsLoadingConnectorTypes(true);
+      setConnectorTypesError(null);
+
+      try {
+        const response = await loadActionTypes({
+          http,
+          includeSystemActions: false,
+        });
+
+        if (!isMounted) return;
+
+        const filtered = response
+          .map((type) => {
+            const canonicalId = getCanonicalConnectorTypeId(type.id);
+            return canonicalId
+              ? ({ ...type, id: canonicalId } as ActionType & { id: SupportedConnectorTypeId })
+              : null;
+          })
+          .filter((t): t is ActionType & { id: SupportedConnectorTypeId } => t !== null)
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        setConnectorTypes(filtered);
+
+        setFormConfig((prev) => {
+          if (prev.connectorTypeId && filtered.some((t) => t.id === prev.connectorTypeId)) {
+            return prev;
+          }
+          const nextTypeId = filtered[0]?.id ?? '';
+          if (prev.connectorTypeId === nextTypeId) return prev;
+          return { ...prev, connectorTypeId: nextTypeId, connectorId: '' };
+        });
+      } catch (error) {
+        if (abortController.signal.aborted || !isMounted) return;
+        const message = getErrorMessage(error);
+        setConnectorTypesError(message);
+        toasts.addDanger({
+          title: i18n.translate('customizableForm.builder.loadConnectorTypesErrorTitle', {
+            defaultMessage: 'Unable to load connector types',
+          }),
+          text: message,
+        });
+      } finally {
+        if (isMounted) setIsLoadingConnectorTypes(false);
+      }
+    };
+
+    loadConnectorTypesFx();
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
+  }, [http, toasts]);
+
+  // Load connectors
+  useEffect(() => {
+    let isMounted = true;
+    const abortController = new AbortController();
+
+    const loadConnectorsFx = async () => {
+      setIsLoadingConnectors(true);
+      setConnectorsError(null);
+
+      try {
+        const response = await loadAllActions({
+          http,
+          includeSystemActions: false,
+        });
+
+        if (!isMounted) return;
+
+        const filtered = response
+          .map((connector) => {
+            const rawType: string | undefined =
+              (connector as any).actionTypeId ?? (connector as any).connector_type_id;
+
+            const canonicalId = getCanonicalConnectorTypeId(rawType);
+            return canonicalId
+              ? ({
+                  ...connector,
+                  actionTypeId: canonicalId,
+                } as ActionConnector & { actionTypeId: SupportedConnectorTypeId })
+              : null;
+          })
+          .filter(
+            (c): c is ActionConnector & { actionTypeId: SupportedConnectorTypeId } => c !== null
+          )
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        setConnectors(filtered);
+      } catch (error) {
+        if (abortController.signal.aborted || !isMounted) return;
+        const message = getErrorMessage(error);
+        setConnectorsError(message);
+        toasts.addDanger({
+          title: i18n.translate('customizableForm.builder.loadConnectorsErrorTitle', {
+            defaultMessage: 'Unable to load connectors',
+          }),
+          text: message,
+        });
+      } finally {
+        if (isMounted) setIsLoadingConnectors(false);
+      }
+    };
+
+    loadConnectorsFx();
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
+  }, [http, toasts]);
+
+  // riallinea connectorId quando cambiano i connettori disponibili
+  useEffect(() => {
+    setFormConfig((prev) => {
+      if (!prev.connectorTypeId) return prev.connectorId === '' ? prev : { ...prev, connectorId: '' };
+      const connectorsForType = connectors.filter((c) => c.actionTypeId === prev.connectorTypeId);
+      if (connectorsForType.length === 0) {
+        return prev.connectorId === '' ? prev : { ...prev, connectorId: '' };
+      }
+      const currentIsValid = connectorsForType.some((c) => c.id === prev.connectorId);
+      return currentIsValid ? prev : { ...prev, connectorId: connectorsForType[0].id };
+    });
+  }, [connectors]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // riallinea quando cambia il tipo selezionato
+  useEffect(() => {
+    setFormConfig((prev) => {
+      if (!prev.connectorTypeId) return { ...prev, connectorId: '' };
+      const connectorsForType = connectors.filter((c) => c.actionTypeId === prev.connectorTypeId);
+      if (connectorsForType.length === 0) return { ...prev, connectorId: '' };
+      const currentIsValid = connectorsForType.some((c) => c.id === prev.connectorId);
+      return currentIsValid ? prev : { ...prev, connectorId: connectorsForType[0].id };
+    });
+  }, [formConfig.connectorTypeId, connectors]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateConfig = (partial: Partial<FormConfig>) => {
     setFormConfig((prev) => ({ ...prev, ...partial }));
@@ -116,36 +287,32 @@ export const CustomizableFormBuilder = ({ notifications }: CustomizableFormBuild
   const updateField = (fieldId: string, changes: Partial<FormFieldConfig>) => {
     setFormConfig((prev) => ({
       ...prev,
-      fields: prev.fields.map((field) => (field.id === fieldId ? { ...field, ...changes } : field)),
+      fields: prev.fields.map((f) => (f.id === fieldId ? { ...f, ...changes } : f)),
     }));
   };
 
   const removeField = (fieldId: string) => {
     setFormConfig((prev) => ({
       ...prev,
-      fields: prev.fields.filter((field) => field.id !== fieldId),
+      fields: prev.fields.filter((f) => f.id !== fieldId),
     }));
   };
 
   const addField = () => {
     fieldCounter.current += 1;
-    const newFieldNumber = fieldCounter.current;
+    const n = fieldCounter.current;
     const newField: FormFieldConfig = {
-      id: `field-${newFieldNumber}`,
-      key: `field_${newFieldNumber}`,
+      id: `field-${n}`,
+      key: `field_${n}`,
       label: i18n.translate('customizableForm.builder.newFieldLabel', {
         defaultMessage: 'Field {position}',
-        values: { position: newFieldNumber },
+        values: { position: n },
       }),
       placeholder: '',
       type: 'text',
       required: false,
     };
-
-    setFormConfig((prev) => ({
-      ...prev,
-      fields: [...prev.fields, newField],
-    }));
+    setFormConfig((prev) => ({ ...prev, fields: [...prev.fields, newField] }));
   };
 
   const handleSave = () => {
@@ -159,10 +326,43 @@ export const CustomizableFormBuilder = ({ notifications }: CustomizableFormBuild
     });
   };
 
-  const previewConnectorName = useMemo(() => {
-    const selected = CONNECTOR_OPTIONS.find((option) => option.value === formConfig.connectorId);
-    return selected?.text ?? formConfig.connectorId;
-  }, [formConfig.connectorId]);
+  const handleConnectorTypeChange = useCallback(
+    (nextTypeId: string) => {
+      setFormConfig((prev) => {
+        if (prev.connectorTypeId === nextTypeId) return prev;
+        const connectorsForType = connectors.filter((c) => c.actionTypeId === nextTypeId);
+        const nextConnectorId = connectorsForType[0]?.id ?? '';
+        return { ...prev, connectorTypeId: nextTypeId, connectorId: nextConnectorId };
+      });
+    },
+    [connectors]
+  );
+
+  const handleConnectorChange = useCallback((nextConnectorId: string) => {
+    setFormConfig((prev) => (prev.connectorId === nextConnectorId ? prev : { ...prev, connectorId: nextConnectorId }));
+  }, []);
+
+  const connectorTypeOptions = useMemo(() => toConnectorTypeOptions(connectorTypes), [connectorTypes]);
+
+  const connectorsForSelectedType = useMemo(() => {
+    const list = connectors.filter(c => c.actionTypeId === formConfig.connectorTypeId);
+    return list;
+  }, [connectors, formConfig.connectorTypeId]);
+
+  const connectorOptions = useMemo(
+    () => toConnectorOptions(connectorsForSelectedType),
+    [connectorsForSelectedType]
+  );
+
+  const selectedConnectorType = useMemo(
+    () => connectorTypes.find((t) => t.id === formConfig.connectorTypeId),
+    [connectorTypes, formConfig.connectorTypeId]
+  );
+
+  const selectedConnector = useMemo(
+    () => connectors.find((c) => c.id === formConfig.connectorId),
+    [connectors, formConfig.connectorId]
+  );
 
   return (
     <EuiPageTemplate paddingSize="m">
@@ -176,23 +376,34 @@ export const CustomizableFormBuilder = ({ notifications }: CustomizableFormBuild
         })}
       />
 
-      <EuiPageTemplate.Section paddingSize="l" grow={true}>
+      <EuiPageTemplate.Section paddingSize="l" grow>
         <EuiFlexGroup gutterSize="l" alignItems="stretch">
           <EuiFlexItem grow={3}>
-            <PreviewPanel config={formConfig} connectorLabel={previewConnectorName} />
+            <PreviewPanel
+              config={formConfig}
+              selectedConnectorType={selectedConnectorType}
+              selectedConnector={selectedConnector}
+            />
           </EuiFlexItem>
 
           <EuiFlexItem grow={2}>
             <ConfigurationPanel
               config={formConfig}
-              onTitleChange={(value) => updateConfig({ title: value })}
-              onDescriptionChange={(value) => updateConfig({ description: value })}
-              onConnectorChange={(value) => updateConfig({ connectorId: value })}
-              onTemplateChange={(value) => updateConfig({ documentTemplate: value })}
+              onTitleChange={(v) => updateConfig({ title: v })}
+              onDescriptionChange={(v) => updateConfig({ description: v })}
+              onConnectorTypeChange={handleConnectorTypeChange}
+              onConnectorChange={handleConnectorChange}
+              onTemplateChange={(v) => updateConfig({ documentTemplate: v })}
               onFieldChange={updateField}
               onFieldRemove={removeField}
               onAddField={addField}
               onSave={handleSave}
+              connectorTypeOptions={connectorTypeOptions}
+              connectorOptions={connectorOptions}
+              isLoadingConnectorTypes={isLoadingConnectorTypes}
+              isLoadingConnectors={isLoadingConnectors}
+              connectorTypesError={connectorTypesError}
+              connectorsError={connectorsError}
             />
           </EuiFlexItem>
         </EuiFlexGroup>
@@ -205,27 +416,44 @@ interface ConfigurationPanelProps {
   config: FormConfig;
   onTitleChange: (value: string) => void;
   onDescriptionChange: (value: string) => void;
+  onConnectorTypeChange: (value: string) => void;
   onConnectorChange: (value: string) => void;
   onTemplateChange: (value: string) => void;
   onFieldChange: (fieldId: string, changes: Partial<FormFieldConfig>) => void;
   onFieldRemove: (fieldId: string) => void;
   onAddField: () => void;
   onSave: () => void;
+  connectorTypeOptions: Array<{ value: string; text: string }>;
+  connectorOptions: Array<{ value: string; text: string }>;
+  isLoadingConnectorTypes: boolean;
+  isLoadingConnectors: boolean;
+  connectorTypesError: string | null;
+  connectorsError: string | null;
 }
 
 const ConfigurationPanel = ({
   config,
   onTitleChange,
   onDescriptionChange,
+  onConnectorTypeChange,
   onConnectorChange,
   onTemplateChange,
   onFieldChange,
   onFieldRemove,
   onAddField,
   onSave,
+  connectorTypeOptions,
+  connectorOptions,
+  isLoadingConnectorTypes,
+  isLoadingConnectors,
+  connectorTypesError,
+  connectorsError,
 }: ConfigurationPanelProps) => {
+  const shouldShowConnectorWarning =
+    !isLoadingConnectors && !!config.connectorTypeId && connectorOptions.length === 0;
+
   return (
-    <EuiPanel paddingSize="m" hasShadow={false} hasBorder={true}>
+    <EuiPanel paddingSize="m" hasShadow={false} hasBorder>
       <EuiTitle size="s">
         <h2>
           {i18n.translate('customizableForm.builder.configurationPanelTitle', {
@@ -235,6 +463,36 @@ const ConfigurationPanel = ({
       </EuiTitle>
 
       <EuiSpacer size="m" />
+
+      {connectorTypesError ? (
+        <>
+          <EuiCallOut
+            color="danger"
+            iconType="warning"
+            title={i18n.translate('customizableForm.builder.connectorTypesErrorTitle', {
+              defaultMessage: 'Connector types unavailable',
+            })}
+          >
+            <p>{connectorTypesError}</p>
+          </EuiCallOut>
+          <EuiSpacer size="m" />
+        </>
+      ) : null}
+
+      {connectorsError ? (
+        <>
+          <EuiCallOut
+            color="danger"
+            iconType="warning"
+            title={i18n.translate('customizableForm.builder.connectorsErrorTitle', {
+              defaultMessage: 'Connectors unavailable',
+            })}
+          >
+            <p>{connectorsError}</p>
+          </EuiCallOut>
+          <EuiSpacer size="m" />
+        </>
+      ) : null}
 
       <EuiForm component="div">
         <EuiFormRow
@@ -247,7 +505,7 @@ const ConfigurationPanel = ({
               defaultMessage: 'Form title',
             })}
             value={config.title}
-            onChange={(event) => onTitleChange(event.target.value)}
+            onChange={(e) => onTitleChange(e.target.value)}
           />
         </EuiFormRow>
 
@@ -259,10 +517,34 @@ const ConfigurationPanel = ({
           <EuiTextArea
             resize="vertical"
             value={config.description}
-            onChange={(event) => onDescriptionChange(event.target.value)}
+            onChange={(e) => onDescriptionChange(e.target.value)}
             aria-label={i18n.translate('customizableForm.builder.formDescriptionAria', {
               defaultMessage: 'Form description',
             })}
+          />
+        </EuiFormRow>
+
+        <EuiFormRow
+          label={i18n.translate('customizableForm.builder.connectorTypeLabel', {
+            defaultMessage: 'Connector type',
+          })}
+          helpText={i18n.translate('customizableForm.builder.connectorTypeHelpText', {
+            defaultMessage: 'Only supported connector types are listed.',
+          })}
+        >
+          <EuiSelect
+            options={[
+              {
+                value: '',
+                text: i18n.translate('customizableForm.builder.selectConnectorTypePlaceholder', {
+                  defaultMessage: 'Select a connector type',
+                }),
+              },
+              ...connectorTypeOptions,
+            ]}
+            value={config.connectorTypeId}
+            onChange={(e: ChangeEvent<HTMLSelectElement>) => onConnectorTypeChange(e.target.value)}
+            disabled={isLoadingConnectorTypes || connectorTypeOptions.length === 0}
           />
         </EuiFormRow>
 
@@ -272,15 +554,44 @@ const ConfigurationPanel = ({
           })}
           helpText={i18n.translate('customizableForm.builder.connectorHelpText', {
             defaultMessage:
-              'Index connectors are supported for now. Additional connector types will be available later.',
+              'Choose an existing connector for the selected type. Configure connectors from Stack Management if none are available.',
           })}
         >
           <EuiSelect
-            options={CONNECTOR_OPTIONS}
+            options={[
+              {
+                value: '',
+                text: i18n.translate('customizableForm.builder.selectConnectorPlaceholder', {
+                  defaultMessage: 'Select a connector',
+                }),
+              },
+              ...connectorOptions,
+            ]}
             value={config.connectorId}
-            onChange={(event: ChangeEvent<HTMLSelectElement>) => onConnectorChange(event.target.value)}
+            onChange={(e: ChangeEvent<HTMLSelectElement>) => onConnectorChange(e.target.value)}
+            disabled={isLoadingConnectors || !config.connectorTypeId || connectorOptions.length === 0}
           />
         </EuiFormRow>
+
+        {shouldShowConnectorWarning ? (
+          <>
+            <EuiCallOut
+              color="warning"
+              iconType="iInCircle"
+              size="s"
+              title={i18n.translate('customizableForm.builder.noConnectorsWarningTitle', {
+                defaultMessage: 'No connectors found',
+              })}
+            >
+              <p>
+                {i18n.translate('customizableForm.builder.noConnectorsWarningBody', {
+                  defaultMessage: 'Create a connector of this type to enable submissions.',
+                })}
+              </p>
+            </EuiCallOut>
+            <EuiSpacer size="m" />
+          </>
+        ) : null}
 
         <EuiSpacer size="l" />
 
@@ -334,7 +645,7 @@ const ConfigurationPanel = ({
             >
               <EuiFieldText
                 value={field.label}
-                onChange={(event) => onFieldChange(field.id, { label: event.target.value })}
+                onChange={(e) => onFieldChange(field.id, { label: e.target.value })}
               />
             </EuiFormRow>
 
@@ -349,7 +660,7 @@ const ConfigurationPanel = ({
             >
               <EuiFieldText
                 value={field.key}
-                onChange={(event) => onFieldChange(field.id, { key: event.target.value })}
+                onChange={(e) => onFieldChange(field.id, { key: e.target.value })}
               />
             </EuiFormRow>
 
@@ -360,7 +671,7 @@ const ConfigurationPanel = ({
             >
               <EuiFieldText
                 value={field.placeholder ?? ''}
-                onChange={(event) => onFieldChange(field.id, { placeholder: event.target.value })}
+                onChange={(e) => onFieldChange(field.id, { placeholder: e.target.value })}
               />
             </EuiFormRow>
 
@@ -370,10 +681,23 @@ const ConfigurationPanel = ({
               })}
             >
               <EuiSelect
-                options={FIELD_TYPE_OPTIONS}
+                options={[
+                  {
+                    value: 'text',
+                    text: i18n.translate('customizableForm.builder.fieldType.text', {
+                      defaultMessage: 'Single line text',
+                    }),
+                  },
+                  {
+                    value: 'textarea',
+                    text: i18n.translate('customizableForm.builder.fieldType.textarea', {
+                      defaultMessage: 'Multiline text',
+                    }),
+                  },
+                ]}
                 value={field.type}
-                onChange={(event: ChangeEvent<HTMLSelectElement>) =>
-                  onFieldChange(field.id, { type: event.target.value as FormFieldType })
+                onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+                  onFieldChange(field.id, { type: e.target.value as FormFieldType })
                 }
               />
             </EuiFormRow>
@@ -384,7 +708,7 @@ const ConfigurationPanel = ({
                   defaultMessage: 'Required',
                 })}
                 checked={field.required}
-                onChange={(event) => onFieldChange(field.id, { required: event.target.checked })}
+                onChange={(e) => onFieldChange(field.id, { required: e.target.checked })}
               />
             </EuiFormRow>
 
@@ -417,14 +741,15 @@ const ConfigurationPanel = ({
             defaultMessage: 'Document to index',
           })}
           helpText={i18n.translate('customizableForm.builder.templateHelpText', {
-            defaultMessage: 'Use the variables defined above to compose a valid JSON document. Example: {example}.',
+            defaultMessage:
+              'Use the variables defined above to compose a valid JSON document. Example: {example}.',
             values: { example: '{{message}}' },
           })}
         >
           <EuiTextArea
             resize="vertical"
             value={config.documentTemplate}
-            onChange={(event) => onTemplateChange(event.target.value)}
+            onChange={(e) => onTemplateChange(e.target.value)}
             aria-label={i18n.translate('customizableForm.builder.templateAriaLabel', {
               defaultMessage: 'Connector payload template',
             })}
@@ -446,10 +771,11 @@ const ConfigurationPanel = ({
 
 interface PreviewPanelProps {
   config: FormConfig;
-  connectorLabel: string;
+  selectedConnectorType?: ActionType;
+  selectedConnector?: ActionConnector;
 }
 
-const PreviewPanel = ({ config, connectorLabel }: PreviewPanelProps) => {
+const PreviewPanel = ({ config, selectedConnectorType, selectedConnector }: PreviewPanelProps) => {
   const hasFields = config.fields.length > 0;
   const title = config.title?.trim()
     ? config.title
@@ -465,7 +791,7 @@ const PreviewPanel = ({ config, connectorLabel }: PreviewPanelProps) => {
       });
 
   return (
-    <EuiPanel paddingSize="l" hasShadow={false} hasBorder={true}>
+    <EuiPanel paddingSize="l" hasShadow={false} hasBorder>
       <EuiTitle size="l">
         <h1>{title}</h1>
       </EuiTitle>
@@ -530,11 +856,30 @@ const PreviewPanel = ({ config, connectorLabel }: PreviewPanelProps) => {
 
       <EuiCallOut
         title={i18n.translate('customizableForm.builder.previewConnectorTitle', {
-          defaultMessage: 'Selected connector',
+          defaultMessage: 'Connector summary',
         })}
-        iconType="indexManagementApp"
+        iconType="plug"
       >
-        <p>{connectorLabel}</p>
+        <p>
+          {selectedConnectorType
+            ? i18n.translate('customizableForm.builder.previewConnectorTypeLine', {
+                defaultMessage: 'Type: {typeName}',
+                values: { typeName: selectedConnectorType.name },
+              })
+            : i18n.translate('customizableForm.builder.previewConnectorTypeMissing', {
+                defaultMessage: 'Type: not selected',
+              })}
+        </p>
+        <p>
+          {selectedConnector
+            ? i18n.translate('customizableForm.builder.previewConnectorNameLine', {
+                defaultMessage: 'Connector: {connectorName}',
+                values: { connectorName: selectedConnector.name },
+              })
+            : i18n.translate('customizableForm.builder.previewConnectorNameMissing', {
+                defaultMessage: 'Connector: not selected',
+              })}
+        </p>
       </EuiCallOut>
 
       <EuiSpacer size="l" />

@@ -10,16 +10,17 @@ import CustomizableFormBuilder from './form_builder/form_builder';
 interface CustomizableFormAppDeps {
   basename: string;
   notifications: CoreStart['notifications'];
+  http: CoreStart['http'];
   navigation: NavigationPublicPluginStart;
 }
 
-export const CustomizableFormApp = ({ basename, notifications, navigation }: CustomizableFormAppDeps) => {
+export const CustomizableFormApp = ({ basename, notifications, http, navigation }: CustomizableFormAppDeps) => {
   return (
     <Router basename={basename}>
       <I18nProvider>
         <>
           <navigation.ui.TopNavMenu appName={PLUGIN_ID} showSearchBar={false} useDefaultBehaviors={true} />
-          <CustomizableFormBuilder notifications={notifications} />
+          <CustomizableFormBuilder notifications={notifications} http={http} />
         </>
       </I18nProvider>
     </Router>
