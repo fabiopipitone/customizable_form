@@ -20,7 +20,6 @@ import {
   EuiFlexItem,
   EuiForm,
   EuiFormRow,
-  EuiPageTemplate,
   EuiPanel,
   EuiSelect,
   EuiSpacer,
@@ -122,6 +121,39 @@ const toConnectorTypeOptions = (types: Array<ActionType & { id: SupportedConnect
 
 const toConnectorOptions = (connectors: ActionConnector[]) =>
   connectors.map((connector) => ({ value: connector.id, text: connector.name }));
+
+interface PreviewContentProps {
+  config: FormConfig;
+  onSubmit: () => void;
+}
+
+const PanelHeader = ({ title }: { title: string }) => (
+  <div
+    style={{
+      backgroundColor: '#eef3fc',
+      padding: '12px 16px',
+      borderBottom: '1px solid #d3dae6',
+      borderTopLeftRadius: 4,
+      borderTopRightRadius: 4,
+      margin: '-16px -16px 16px -16px',
+    }}
+  >
+    <EuiTitle size="xs">
+      <h3 style={{ margin: 0 }}>{title}</h3>
+    </EuiTitle>
+  </div>
+);
+
+const PreviewCard = ({ config, onSubmit }: PreviewContentProps) => (
+  <EuiPanel paddingSize="m" hasShadow hasBorder={false}>
+    <PanelHeader
+      title={i18n.translate('customizableForm.builder.previewPanelTitle', {
+        defaultMessage: 'Preview',
+      })}
+    />
+    <PreviewContent config={config} onSubmit={onSubmit} />
+  </EuiPanel>
+);
 
 export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFormBuilderProps) => {
   const [formConfig, setFormConfig] = useState<FormConfig>(INITIAL_CONFIG);
@@ -315,16 +347,20 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
     setFormConfig((prev) => ({ ...prev, fields: [...prev.fields, newField] }));
   };
 
-  const handleSave = () => {
-    notifications.toasts.addSuccess({
-      title: i18n.translate('customizableForm.builder.configurationSavedTitle', {
-        defaultMessage: 'Configuration saved',
-      }),
-      text: i18n.translate('customizableForm.builder.configurationSavedText', {
-        defaultMessage: 'Persisting the configuration will be implemented in a later iteration.',
-      }),
+  const handleTestSubmission = useCallback(() => {
+    // TODO: wire connector execution
+    console.log('Test submission triggered', {
+      connectorTypeId: formConfig.connectorTypeId,
+      connectorId: formConfig.connectorId,
+      template: formConfig.documentTemplate,
+      fields: formConfig.fields,
     });
-  };
+  }, [formConfig]);
+
+  const handleSaveVisualization = useCallback(() => {
+    // TODO: replace with Kibana save modal integration
+    console.log('Save visualization requested', formConfig);
+  }, [formConfig]);
 
   const handleConnectorTypeChange = useCallback(
     (nextTypeId: string) => {
@@ -365,50 +401,52 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
   );
 
   return (
-    <EuiPageTemplate paddingSize="m">
-      <EuiPageTemplate.Header
-        pageTitle={i18n.translate('customizableForm.builder.pageTitle', {
-          defaultMessage: 'Customizable form builder',
-        })}
-        description={i18n.translate('customizableForm.builder.pageDescription', {
-          defaultMessage:
-            'Configure the fields shown on the dashboard widget and map them to the connector payload.',
-        })}
-      />
+    <div
+      style={{
+        backgroundColor: '#f6f9fc',
+        minHeight: '100vh',
+        padding: '24px 32px 32px',
+        boxSizing: 'border-box',
+      }}
+    >
+      <EuiFlexGroup gutterSize="m" alignItems="stretch">
+        <EuiFlexItem grow={4}>
+          <EuiFlexGroup direction="column" gutterSize="m">
+            <EuiFlexItem grow={false}>
+              <PreviewCard config={formConfig} onSubmit={handleTestSubmission} />
+            </EuiFlexItem>
+            <EuiFlexItem grow={false}>
+                <InfoPanel
+                  config={formConfig}
+                  selectedConnectorType={selectedConnectorType}
+                  selectedConnector={selectedConnector}
+                />
+            </EuiFlexItem>
+          </EuiFlexGroup>
+        </EuiFlexItem>
 
-      <EuiPageTemplate.Section paddingSize="l" grow>
-        <EuiFlexGroup gutterSize="l" alignItems="stretch">
-          <EuiFlexItem grow={3}>
-            <PreviewPanel
-              config={formConfig}
-              selectedConnectorType={selectedConnectorType}
-              selectedConnector={selectedConnector}
-            />
-          </EuiFlexItem>
-
-          <EuiFlexItem grow={2}>
-            <ConfigurationPanel
-              config={formConfig}
-              onTitleChange={(v) => updateConfig({ title: v })}
-              onDescriptionChange={(v) => updateConfig({ description: v })}
-              onConnectorTypeChange={handleConnectorTypeChange}
-              onConnectorChange={handleConnectorChange}
-              onTemplateChange={(v) => updateConfig({ documentTemplate: v })}
-              onFieldChange={updateField}
-              onFieldRemove={removeField}
-              onAddField={addField}
-              onSave={handleSave}
-              connectorTypeOptions={connectorTypeOptions}
-              connectorOptions={connectorOptions}
-              isLoadingConnectorTypes={isLoadingConnectorTypes}
-              isLoadingConnectors={isLoadingConnectors}
-              connectorTypesError={connectorTypesError}
-              connectorsError={connectorsError}
-            />
-          </EuiFlexItem>
-        </EuiFlexGroup>
-      </EuiPageTemplate.Section>
-    </EuiPageTemplate>
+        <EuiFlexItem grow={2}>
+          <ConfigurationPanel
+            config={formConfig}
+            onTitleChange={(v) => updateConfig({ title: v })}
+            onDescriptionChange={(v) => updateConfig({ description: v })}
+            onConnectorTypeChange={handleConnectorTypeChange}
+            onConnectorChange={handleConnectorChange}
+            onTemplateChange={(v) => updateConfig({ documentTemplate: v })}
+            onFieldChange={updateField}
+            onFieldRemove={removeField}
+            onAddField={addField}
+            onSave={handleSaveVisualization}
+            connectorTypeOptions={connectorTypeOptions}
+            connectorOptions={connectorOptions}
+            isLoadingConnectorTypes={isLoadingConnectorTypes}
+            isLoadingConnectors={isLoadingConnectors}
+            connectorTypesError={connectorTypesError}
+            connectorsError={connectorsError}
+          />
+        </EuiFlexItem>
+      </EuiFlexGroup>
+    </div>
   );
 };
 
@@ -453,14 +491,12 @@ const ConfigurationPanel = ({
     !isLoadingConnectors && !!config.connectorTypeId && connectorOptions.length === 0;
 
   return (
-    <EuiPanel paddingSize="m" hasShadow={false} hasBorder>
-      <EuiTitle size="s">
-        <h2>
-          {i18n.translate('customizableForm.builder.configurationPanelTitle', {
-            defaultMessage: 'Configuration',
-          })}
-        </h2>
-      </EuiTitle>
+    <EuiPanel paddingSize="m" hasShadow hasBorder={false}>
+      <PanelHeader
+        title={i18n.translate('customizableForm.builder.configurationPanelTitleText', {
+          defaultMessage: 'Configuration',
+        })}
+      />
 
       <EuiSpacer size="m" />
 
@@ -759,23 +795,109 @@ const ConfigurationPanel = ({
 
         <EuiSpacer size="l" />
 
-        <EuiButton fill iconType="save" onClick={onSave}>
-          {i18n.translate('customizableForm.builder.saveButton', {
-            defaultMessage: 'Save configuration',
-          })}
-        </EuiButton>
+        <EuiFlexGroup justifyContent="flexEnd">
+          <EuiFlexItem grow={false}>
+            <EuiButton fill iconType="save" onClick={onSave}>
+              {i18n.translate('customizableForm.builder.saveVisualizationButton', {
+                defaultMessage: 'Save Visualization',
+              })}
+            </EuiButton>
+          </EuiFlexItem>
+        </EuiFlexGroup>
       </EuiForm>
     </EuiPanel>
   );
 };
 
-interface PreviewPanelProps {
+interface InfoPanelProps {
   config: FormConfig;
-  selectedConnectorType?: ActionType;
-  selectedConnector?: ActionConnector;
+  selectedConnectorType?: ActionType & { id: SupportedConnectorTypeId };
+  selectedConnector?: ActionConnector & { actionTypeId: SupportedConnectorTypeId };
 }
 
-const PreviewPanel = ({ config, selectedConnectorType, selectedConnector }: PreviewPanelProps) => {
+const InfoPanel = ({ config, selectedConnectorType, selectedConnector }: InfoPanelProps) => {
+  const connectorName = selectedConnector
+    ? selectedConnector.name
+    : i18n.translate('customizableForm.builder.infoPanel.noConnector', {
+        defaultMessage: 'No connector selected',
+      });
+  const connectorTypeLabel = selectedConnectorType?.name ?? selectedConnector?.actionTypeId ?? '—';
+
+  return (
+    <EuiPanel paddingSize="m" hasShadow hasBorder={false}>
+      <PanelHeader
+        title={i18n.translate('customizableForm.builder.infoPanelTitle', {
+          defaultMessage: 'Info',
+        })}
+      />
+
+      <section>
+        <EuiTitle size="xs">
+          <h3>
+            {i18n.translate('customizableForm.builder.infoPanel.summaryTitle', {
+              defaultMessage: 'Connectors Summary',
+            })}
+          </h3>
+        </EuiTitle>
+
+        <EuiSpacer size="s" />
+
+        <div
+          style={{
+            border: '1px solid #d3dae6',
+            borderRadius: 4,
+            padding: '12px 16px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 16,
+          }}
+        >
+          <EuiText size="s">
+            <strong>
+              {i18n.translate('customizableForm.builder.infoPanel.connectorLabel', {
+                defaultMessage: 'Connector: ',
+              })}
+            </strong>
+            {connectorName}
+          </EuiText>
+          <EuiText size="s">
+            <strong>
+              {i18n.translate('customizableForm.builder.infoPanel.typeLabel', {
+                defaultMessage: 'Type: ',
+              })}
+            </strong>
+            {connectorTypeLabel}
+          </EuiText>
+        </div>
+
+        <EuiSpacer size="m" />
+      </section>
+
+      <EuiSpacer size="m" />
+
+      <hr style={{ border: 'none', borderTop: '1px solid #d3dae6', margin: '8px 0 16px' }} />
+
+      <section>
+        <EuiTitle size="xs">
+          <h3>
+            {i18n.translate('customizableForm.builder.infoPanel.payloadTitle', {
+              defaultMessage: 'Payload Preview',
+            })}
+          </h3>
+        </EuiTitle>
+
+        <EuiSpacer size="s" />
+
+        <EuiCodeBlock language="json" isCopyable>
+          {config.documentTemplate}
+        </EuiCodeBlock>
+      </section>
+    </EuiPanel>
+  );
+};
+
+const PreviewContent = ({ config, onSubmit }: PreviewContentProps) => {
   const hasFields = config.fields.length > 0;
   const title = config.title?.trim()
     ? config.title
@@ -791,7 +913,7 @@ const PreviewPanel = ({ config, selectedConnectorType, selectedConnector }: Prev
       });
 
   return (
-    <EuiPanel paddingSize="l" hasShadow={false} hasBorder>
+    <>
       <EuiTitle size="l">
         <h1>{title}</h1>
       </EuiTitle>
@@ -805,7 +927,7 @@ const PreviewPanel = ({ config, selectedConnectorType, selectedConnector }: Prev
       <EuiSpacer size="m" />
 
       {hasFields ? (
-        <EuiForm component="form">
+        <EuiForm component="form" onSubmit={(event) => event.preventDefault()}>
           {config.fields.map((field) => (
             <EuiFormRow
               key={field.id}
@@ -829,9 +951,9 @@ const PreviewPanel = ({ config, selectedConnectorType, selectedConnector }: Prev
 
           <EuiSpacer size="m" />
 
-          <EuiButton fill iconType="play">
+          <EuiButton fill iconType="play" onClick={onSubmit}>
             {i18n.translate('customizableForm.builder.previewSubmitButton', {
-              defaultMessage: 'Trigger connector',
+              defaultMessage: 'Submit',
             })}
           </EuiButton>
         </EuiForm>
@@ -851,53 +973,7 @@ const PreviewPanel = ({ config, selectedConnectorType, selectedConnector }: Prev
           })}
         />
       )}
-
-      <EuiSpacer size="l" />
-
-      <EuiCallOut
-        title={i18n.translate('customizableForm.builder.previewConnectorTitle', {
-          defaultMessage: 'Connector summary',
-        })}
-        iconType="plug"
-      >
-        <p>
-          {selectedConnectorType
-            ? i18n.translate('customizableForm.builder.previewConnectorTypeLine', {
-                defaultMessage: 'Type: {typeName}',
-                values: { typeName: selectedConnectorType.name },
-              })
-            : i18n.translate('customizableForm.builder.previewConnectorTypeMissing', {
-                defaultMessage: 'Type: not selected',
-              })}
-        </p>
-        <p>
-          {selectedConnector
-            ? i18n.translate('customizableForm.builder.previewConnectorNameLine', {
-                defaultMessage: 'Connector: {connectorName}',
-                values: { connectorName: selectedConnector.name },
-              })
-            : i18n.translate('customizableForm.builder.previewConnectorNameMissing', {
-                defaultMessage: 'Connector: not selected',
-              })}
-        </p>
-      </EuiCallOut>
-
-      <EuiSpacer size="l" />
-
-      <EuiTitle size="xs">
-        <h3>
-          {i18n.translate('customizableForm.builder.previewTemplateTitle', {
-            defaultMessage: 'Payload preview',
-          })}
-        </h3>
-      </EuiTitle>
-
-      <EuiSpacer size="s" />
-
-      <EuiCodeBlock language="json" isCopyable>
-        {config.documentTemplate}
-      </EuiCodeBlock>
-    </EuiPanel>
+    </>
   );
 };
 
