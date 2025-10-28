@@ -24,6 +24,8 @@ import {
   EuiSelect,
   EuiSpacer,
   EuiSwitch,
+  EuiTab,
+  EuiTabs,
   EuiText,
   EuiTextArea,
   EuiTitle,
@@ -129,6 +131,18 @@ const toConnectorTypeOptions = (types: Array<ActionType & { id: SupportedConnect
 
 const toConnectorOptions = (connectors: ActionConnector[]) =>
   connectors.map((connector) => ({ value: connector.id, text: connector.name }));
+
+const getTemplateVariables = (template: string): string[] => {
+  const variables = new Set<string>();
+  template.replace(/{{\s*([^{}\s]+)\s*}}/g, (_, variable: string) => {
+    const trimmed = variable.trim();
+    if (trimmed) {
+      variables.add(trimmed);
+    }
+    return '';
+  });
+  return Array.from(variables);
+};
 
 interface PreviewContentProps {
   config: FormConfig;
@@ -440,6 +454,40 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
     [connectors, formConfig.connectorId]
   );
 
+  const templateVariables = useMemo(
+    () => getTemplateVariables(formConfig.documentTemplate),
+    [formConfig.documentTemplate]
+  );
+
+  const fieldKeys = useMemo(() => {
+    return formConfig.fields
+      .map((field) => field.key.trim())
+      .filter((key) => key.length > 0);
+  }, [formConfig.fields]);
+
+  const missingTemplateVariables = useMemo(() => {
+    if (templateVariables.length === 0) return [] as string[];
+    const definedKeys = new Set(fieldKeys);
+    return templateVariables.filter((variable) => !definedKeys.has(variable));
+  }, [fieldKeys, templateVariables]);
+
+  const unusedTemplateFields = useMemo(() => {
+    if (fieldKeys.length === 0) return [] as Array<{ key: string; label: string }>;
+    const usedVariables = new Set(templateVariables);
+    return formConfig.fields
+      .map((field) => {
+        const key = field.key.trim();
+        if (!key || usedVariables.has(key)) {
+          return null;
+        }
+        return {
+          key,
+          label: field.label?.trim() || key,
+        };
+      })
+      .filter((field): field is { key: string; label: string } => field !== null);
+  }, [formConfig.fields, templateVariables, fieldKeys]);
+
   const isSubmitDisabled = useMemo(
     () =>
       formConfig.fields.some(
@@ -457,9 +505,12 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
     }, {});
 
     return formConfig.documentTemplate.replace(/{{\s*([^{}\s]+)\s*}}/g, (_, variable: string) => {
-      return valueMap[variable] ?? '';
+      const trimmed = variable.trim();
+      return valueMap[trimmed] ?? '';
     });
   }, [formConfig.documentTemplate, formConfig.fields, fieldValues]);
+
+  const isSaveDisabled = missingTemplateVariables.length > 0;
 
   const handleTestSubmission = useCallback(() => {
     // TODO: wire connector execution
@@ -485,38 +536,38 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
     >
       <EuiFlexGroup gutterSize="m" alignItems="stretch">
         <EuiFlexItem grow={4}>
-            <EuiFlexGroup direction="column" gutterSize="m">
-              <EuiFlexItem grow={false}>
-                <PreviewCard
-                  config={formConfig}
-                  fieldValues={fieldValues}
-                  onFieldValueChange={handleFieldValueChange}
-                  isSubmitDisabled={isSubmitDisabled}
-                  onSubmit={handleTestSubmission}
-                />
-              </EuiFlexItem>
-              <EuiFlexItem grow={false}>
-                <InfoPanel
-                  selectedConnectorType={selectedConnectorType}
-                  selectedConnector={selectedConnector}
-                  payloadPreview={renderedPayload}
-                />
-              </EuiFlexItem>
-            </EuiFlexGroup>
+          <EuiFlexGroup direction="column" gutterSize="m">
+            <EuiFlexItem grow={false}>
+              <PreviewCard
+                config={formConfig}
+                fieldValues={fieldValues}
+                onFieldValueChange={handleFieldValueChange}
+                isSubmitDisabled={isSubmitDisabled}
+                onSubmit={handleTestSubmission}
+              />
+            </EuiFlexItem>
+            <EuiFlexItem grow={false}>
+              <InfoPanel
+                selectedConnectorType={selectedConnectorType}
+                selectedConnector={selectedConnector}
+                payloadPreview={renderedPayload}
+              />
+            </EuiFlexItem>
+          </EuiFlexGroup>
         </EuiFlexItem>
 
-          <EuiFlexItem grow={2}>
-            <ConfigurationPanel
-              config={formConfig}
-              onTitleChange={(v) => updateConfig({ title: v })}
-              onDescriptionChange={(v) => updateConfig({ description: v })}
-              onShowTitleChange={(show) => updateConfig({ showTitle: show })}
-              onShowDescriptionChange={(show) => updateConfig({ showDescription: show })}
-              onConnectorTypeChange={handleConnectorTypeChange}
-              onConnectorChange={handleConnectorChange}
-              onTemplateChange={(v) => updateConfig({ documentTemplate: v })}
-              onFieldChange={updateField}
-              onFieldRemove={removeField}
+        <EuiFlexItem grow={2}>
+          <ConfigurationPanel
+            config={formConfig}
+            onTitleChange={(v) => updateConfig({ title: v })}
+            onDescriptionChange={(v) => updateConfig({ description: v })}
+            onShowTitleChange={(show) => updateConfig({ showTitle: show })}
+            onShowDescriptionChange={(show) => updateConfig({ showDescription: show })}
+            onConnectorTypeChange={handleConnectorTypeChange}
+            onConnectorChange={handleConnectorChange}
+            onTemplateChange={(v) => updateConfig({ documentTemplate: v })}
+            onFieldChange={updateField}
+            onFieldRemove={removeField}
             onAddField={addField}
             onSave={handleSaveVisualization}
             connectorTypeOptions={connectorTypeOptions}
@@ -525,6 +576,9 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
             isLoadingConnectors={isLoadingConnectors}
             connectorTypesError={connectorTypesError}
             connectorsError={connectorsError}
+            missingTemplateVariables={missingTemplateVariables}
+            unusedTemplateFields={unusedTemplateFields}
+            isSaveDisabled={isSaveDisabled}
           />
         </EuiFlexItem>
       </EuiFlexGroup>
@@ -551,7 +605,12 @@ interface ConfigurationPanelProps {
   isLoadingConnectors: boolean;
   connectorTypesError: string | null;
   connectorsError: string | null;
+  missingTemplateVariables: string[];
+  unusedTemplateFields: Array<{ key: string; label: string }>;
+  isSaveDisabled: boolean;
 }
+
+type ConfigurationTab = 'general' | 'connectors' | 'fields' | 'payload';
 
 const ConfigurationPanel = ({
   config,
@@ -572,9 +631,43 @@ const ConfigurationPanel = ({
   isLoadingConnectors,
   connectorTypesError,
   connectorsError,
+  missingTemplateVariables,
+  unusedTemplateFields,
+  isSaveDisabled,
 }: ConfigurationPanelProps) => {
+  const [activeTab, setActiveTab] = useState<ConfigurationTab>('general');
+
   const shouldShowConnectorWarning =
     !isLoadingConnectors && !!config.connectorTypeId && connectorOptions.length === 0;
+
+  const hasMissingTemplateVariables = missingTemplateVariables.length > 0;
+
+  const tabs: Array<{ id: ConfigurationTab; label: string }> = [
+    {
+      id: 'general',
+      label: i18n.translate('customizableForm.builder.configurationTab.general', {
+        defaultMessage: 'General',
+      }),
+    },
+    {
+      id: 'connectors',
+      label: i18n.translate('customizableForm.builder.configurationTab.connectors', {
+        defaultMessage: 'Connectors',
+      }),
+    },
+    {
+      id: 'fields',
+      label: i18n.translate('customizableForm.builder.configurationTab.fields', {
+        defaultMessage: 'Fields',
+      }),
+    },
+    {
+      id: 'payload',
+      label: i18n.translate('customizableForm.builder.configurationTab.payload', {
+        defaultMessage: 'Payload Template',
+      }),
+    },
+  ];
 
   return (
     <EuiPanel paddingSize="m" hasShadow hasBorder={false}>
@@ -584,347 +677,408 @@ const ConfigurationPanel = ({
         })}
       />
 
+      <EuiTabs>
+        {tabs.map((tab) => (
+          <EuiTab
+            key={tab.id}
+            isSelected={activeTab === tab.id}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {tab.label}
+          </EuiTab>
+        ))}
+      </EuiTabs>
+
       <EuiSpacer size="m" />
 
-      {connectorTypesError ? (
-        <>
-          <EuiCallOut
-            color="danger"
-            iconType="warning"
-            title={i18n.translate('customizableForm.builder.connectorTypesErrorTitle', {
-              defaultMessage: 'Connector types unavailable',
+      {activeTab === 'general' ? (
+        <EuiForm component="div">
+          <EuiFormRow
+            label={i18n.translate('customizableForm.builder.showTitleToggleLabel', {
+              defaultMessage: 'Show form title',
             })}
+            display="columnCompressed"
+            hasChildLabel={false}
           >
-            <p>{connectorTypesError}</p>
-          </EuiCallOut>
-          <EuiSpacer size="m" />
-        </>
-      ) : null}
+            <EuiSwitch
+              label={i18n.translate('customizableForm.builder.showTitleToggleSwitch', {
+                defaultMessage: 'Display title in preview',
+              })}
+              checked={config.showTitle}
+              onChange={(event) => onShowTitleChange(event.target.checked)}
+            />
+          </EuiFormRow>
 
-      {connectorsError ? (
-        <>
-          <EuiCallOut
-            color="danger"
-            iconType="warning"
-            title={i18n.translate('customizableForm.builder.connectorsErrorTitle', {
-              defaultMessage: 'Connectors unavailable',
-            })}
-          >
-            <p>{connectorsError}</p>
-          </EuiCallOut>
-          <EuiSpacer size="m" />
-        </>
-      ) : null}
-
-      <EuiForm component="div">
-        <EuiFormRow
-          label={i18n.translate('customizableForm.builder.showTitleToggleLabel', {
-            defaultMessage: 'Show form title',
-          })}
-          display="columnCompressed"
-          hasChildLabel={false}
-        >
-          <EuiSwitch
-            label={i18n.translate('customizableForm.builder.showTitleToggleSwitch', {
-              defaultMessage: 'Display title in preview',
-            })}
-            checked={config.showTitle}
-            onChange={(event) => onShowTitleChange(event.target.checked)}
-          />
-        </EuiFormRow>
-
-        <EuiFormRow
-          label={i18n.translate('customizableForm.builder.formTitleLabel', {
-            defaultMessage: 'Form title',
-          })}
-        >
-          <EuiFieldText
-            aria-label={i18n.translate('customizableForm.builder.formTitleAria', {
+          <EuiFormRow
+            label={i18n.translate('customizableForm.builder.formTitleLabel', {
               defaultMessage: 'Form title',
             })}
-            value={config.title}
-            disabled={!config.showTitle}
-            onChange={(e) => onTitleChange(e.target.value)}
-          />
-        </EuiFormRow>
-
-        <EuiFormRow
-          label={i18n.translate('customizableForm.builder.showDescriptionToggleLabel', {
-            defaultMessage: 'Show description',
-          })}
-          display="columnCompressed"
-          hasChildLabel={false}
-        >
-          <EuiSwitch
-            label={i18n.translate('customizableForm.builder.showDescriptionToggleSwitch', {
-              defaultMessage: 'Display description in preview',
-            })}
-            checked={config.showDescription}
-            onChange={(event) => onShowDescriptionChange(event.target.checked)}
-          />
-        </EuiFormRow>
-
-        <EuiFormRow
-          label={i18n.translate('customizableForm.builder.formDescriptionLabel', {
-            defaultMessage: 'Description',
-          })}
-        >
-          <EuiTextArea
-            resize="vertical"
-            value={config.description}
-            disabled={!config.showDescription}
-            onChange={(e) => onDescriptionChange(e.target.value)}
-            aria-label={i18n.translate('customizableForm.builder.formDescriptionAria', {
-              defaultMessage: 'Form description',
-            })}
-          />
-        </EuiFormRow>
-
-        <EuiFormRow
-          label={i18n.translate('customizableForm.builder.connectorTypeLabel', {
-            defaultMessage: 'Connector type',
-          })}
-          helpText={i18n.translate('customizableForm.builder.connectorTypeHelpText', {
-            defaultMessage: 'Only supported connector types are listed.',
-          })}
-        >
-          <EuiSelect
-            options={[
-              {
-                value: '',
-                text: i18n.translate('customizableForm.builder.selectConnectorTypePlaceholder', {
-                  defaultMessage: 'Select a connector type',
-                }),
-              },
-              ...connectorTypeOptions,
-            ]}
-            value={config.connectorTypeId}
-            onChange={(e: ChangeEvent<HTMLSelectElement>) => onConnectorTypeChange(e.target.value)}
-            disabled={isLoadingConnectorTypes || connectorTypeOptions.length === 0}
-          />
-        </EuiFormRow>
-
-        <EuiFormRow
-          label={i18n.translate('customizableForm.builder.connectorLabel', {
-            defaultMessage: 'Connector',
-          })}
-          helpText={i18n.translate('customizableForm.builder.connectorHelpText', {
-            defaultMessage:
-              'Choose an existing connector for the selected type. Configure connectors from Stack Management if none are available.',
-          })}
-        >
-          <EuiSelect
-            options={[
-              {
-                value: '',
-                text: i18n.translate('customizableForm.builder.selectConnectorPlaceholder', {
-                  defaultMessage: 'Select a connector',
-                }),
-              },
-              ...connectorOptions,
-            ]}
-            value={config.connectorId}
-            onChange={(e: ChangeEvent<HTMLSelectElement>) => onConnectorChange(e.target.value)}
-            disabled={isLoadingConnectors || !config.connectorTypeId || connectorOptions.length === 0}
-          />
-        </EuiFormRow>
-
-        {shouldShowConnectorWarning ? (
-          <>
-            <EuiCallOut
-              color="warning"
-              iconType="iInCircle"
-              size="s"
-              title={i18n.translate('customizableForm.builder.noConnectorsWarningTitle', {
-                defaultMessage: 'No connectors found',
+          >
+            <EuiFieldText
+              aria-label={i18n.translate('customizableForm.builder.formTitleAria', {
+                defaultMessage: 'Form title',
               })}
-            >
-              <p>
-                {i18n.translate('customizableForm.builder.noConnectorsWarningBody', {
-                  defaultMessage: 'Create a connector of this type to enable submissions.',
-                })}
-              </p>
-            </EuiCallOut>
-            <EuiSpacer size="m" />
-          </>
-        ) : null}
+              value={config.title}
+              disabled={!config.showTitle}
+              onChange={(e) => onTitleChange(e.target.value)}
+            />
+          </EuiFormRow>
 
-        <EuiSpacer size="l" />
-
-        <EuiTitle size="xs">
-          <h3>
-            {i18n.translate('customizableForm.builder.fieldSectionTitle', {
-              defaultMessage: 'Fields',
+          <EuiFormRow
+            label={i18n.translate('customizableForm.builder.showDescriptionToggleLabel', {
+              defaultMessage: 'Show description',
             })}
-          </h3>
-        </EuiTitle>
+            display="columnCompressed"
+            hasChildLabel={false}
+          >
+            <EuiSwitch
+              label={i18n.translate('customizableForm.builder.showDescriptionToggleSwitch', {
+                defaultMessage: 'Display description in preview',
+              })}
+              checked={config.showDescription}
+              onChange={(event) => onShowDescriptionChange(event.target.checked)}
+            />
+          </EuiFormRow>
 
-        <EuiSpacer size="s" />
+          <EuiFormRow
+            label={i18n.translate('customizableForm.builder.formDescriptionLabel', {
+              defaultMessage: 'Description',
+            })}
+          >
+            <EuiTextArea
+              resize="vertical"
+              value={config.description}
+              disabled={!config.showDescription}
+              onChange={(e) => onDescriptionChange(e.target.value)}
+              aria-label={i18n.translate('customizableForm.builder.formDescriptionAria', {
+                defaultMessage: 'Form description',
+              })}
+            />
+          </EuiFormRow>
+        </EuiForm>
+      ) : null}
 
-        {config.fields.map((field, index) => (
-          <EuiAccordion
-            id={field.id}
-            key={field.id}
-            buttonContent={
-              field.label ||
-              i18n.translate('customizableForm.builder.fieldFallbackLabel', {
-                defaultMessage: 'Field {number}',
-                values: { number: index + 1 },
-              })
-            }
-            paddingSize="s"
-            initialIsOpen={index === 0}
-            extraAction={
-              <EuiToolTip
-                content={i18n.translate('customizableForm.builder.removeFieldTooltip', {
-                  defaultMessage: 'Remove field',
+      {activeTab === 'connectors' ? (
+        <>
+          {connectorTypesError ? (
+            <>
+              <EuiCallOut
+                color="danger"
+                iconType="warning"
+                title={i18n.translate('customizableForm.builder.connectorTypesErrorTitle', {
+                  defaultMessage: 'Connector types unavailable',
                 })}
               >
-                <EuiButtonIcon
-                  iconType="trash"
-                  color="danger"
-                  aria-label={i18n.translate('customizableForm.builder.removeFieldAriaLabel', {
-                    defaultMessage: 'Remove field {label}',
-                    values: { label: field.label || index + 1 },
-                  })}
-                  onClick={() => onFieldRemove(field.id)}
-                />
-              </EuiToolTip>
-            }
-          >
-            <EuiSpacer size="s" />
+                <p>{connectorTypesError}</p>
+              </EuiCallOut>
+              <EuiSpacer size="m" />
+            </>
+          ) : null}
 
-            <EuiFormRow
-              label={i18n.translate('customizableForm.builder.fieldLabelLabel', {
-                defaultMessage: 'Label',
-              })}
-            >
-              <EuiFieldText
-                value={field.label}
-                onChange={(e) => onFieldChange(field.id, { label: e.target.value })}
-              />
-            </EuiFormRow>
+          {connectorsError ? (
+            <>
+              <EuiCallOut
+                color="danger"
+                iconType="warning"
+                title={i18n.translate('customizableForm.builder.connectorsErrorTitle', {
+                  defaultMessage: 'Connectors unavailable',
+                })}
+              >
+                <p>{connectorsError}</p>
+              </EuiCallOut>
+              <EuiSpacer size="m" />
+            </>
+          ) : null}
 
+          <EuiForm component="div">
             <EuiFormRow
-              label={i18n.translate('customizableForm.builder.fieldKeyLabel', {
-                defaultMessage: 'Variable name',
+              label={i18n.translate('customizableForm.builder.connectorTypeLabel', {
+                defaultMessage: 'Connector type',
               })}
-              helpText={i18n.translate('customizableForm.builder.fieldKeyHelpText', {
-                defaultMessage: 'Used in the connector template as {example}.',
-                values: { example: '{{variable_name}}' },
-              })}
-            >
-              <EuiFieldText
-                value={field.key}
-                onChange={(e) => onFieldChange(field.id, { key: e.target.value })}
-              />
-            </EuiFormRow>
-
-            <EuiFormRow
-              label={i18n.translate('customizableForm.builder.fieldPlaceholderLabel', {
-                defaultMessage: 'Placeholder',
-              })}
-            >
-              <EuiFieldText
-                value={field.placeholder ?? ''}
-                onChange={(e) => onFieldChange(field.id, { placeholder: e.target.value })}
-              />
-            </EuiFormRow>
-
-            <EuiFormRow
-              label={i18n.translate('customizableForm.builder.fieldTypeLabel', {
-                defaultMessage: 'Input type',
+              helpText={i18n.translate('customizableForm.builder.connectorTypeHelpText', {
+                defaultMessage: 'Only supported connector types are listed.',
               })}
             >
               <EuiSelect
                 options={[
                   {
-                    value: 'text',
-                    text: i18n.translate('customizableForm.builder.fieldType.text', {
-                      defaultMessage: 'Single line text',
+                    value: '',
+                    text: i18n.translate('customizableForm.builder.selectConnectorTypePlaceholder', {
+                      defaultMessage: 'Select a connector type',
                     }),
                   },
-                  {
-                    value: 'textarea',
-                    text: i18n.translate('customizableForm.builder.fieldType.textarea', {
-                      defaultMessage: 'Multiline text',
-                    }),
-                  },
+                  ...connectorTypeOptions,
                 ]}
-                value={field.type}
+                value={config.connectorTypeId}
                 onChange={(e: ChangeEvent<HTMLSelectElement>) =>
-                  onFieldChange(field.id, { type: e.target.value as FormFieldType })
+                  onConnectorTypeChange(e.target.value)
+                }
+                disabled={isLoadingConnectorTypes || connectorTypeOptions.length === 0}
+              />
+            </EuiFormRow>
+
+            <EuiFormRow
+              label={i18n.translate('customizableForm.builder.connectorLabel', {
+                defaultMessage: 'Connector',
+              })}
+              helpText={i18n.translate('customizableForm.builder.connectorHelpText', {
+                defaultMessage:
+                  'Choose an existing connector for the selected type. Configure connectors from Stack Management if none are available.',
+              })}
+            >
+              <EuiSelect
+                options={[
+                  {
+                    value: '',
+                    text: i18n.translate('customizableForm.builder.selectConnectorPlaceholder', {
+                      defaultMessage: 'Select a connector',
+                    }),
+                  },
+                  ...connectorOptions,
+                ]}
+                value={config.connectorId}
+                onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+                  onConnectorChange(e.target.value)
+                }
+                disabled={
+                  isLoadingConnectors || !config.connectorTypeId || connectorOptions.length === 0
                 }
               />
             </EuiFormRow>
 
-            <EuiFormRow display="columnCompressed">
-              <EuiSwitch
-                label={i18n.translate('customizableForm.builder.fieldRequiredLabel', {
-                  defaultMessage: 'Required',
+            {shouldShowConnectorWarning ? (
+              <>
+                <EuiCallOut
+                  color="warning"
+                  iconType="iInCircle"
+                  size="s"
+                  title={i18n.translate('customizableForm.builder.noConnectorsWarningTitle', {
+                    defaultMessage: 'No connectors found',
+                  })}
+                >
+                  <p>
+                    {i18n.translate('customizableForm.builder.noConnectorsWarningBody', {
+                      defaultMessage: 'Create a connector of this type to enable submissions.',
+                    })}
+                  </p>
+                </EuiCallOut>
+                <EuiSpacer size="m" />
+              </>
+            ) : null}
+          </EuiForm>
+        </>
+      ) : null}
+
+      {activeTab === 'fields' ? (
+        <>
+          <EuiTitle size="xs">
+            <h3>
+              {i18n.translate('customizableForm.builder.fieldSectionTitle', {
+                defaultMessage: 'Fields',
+              })}
+            </h3>
+          </EuiTitle>
+
+          <EuiSpacer size="s" />
+
+          {config.fields.map((field, index) => (
+            <EuiAccordion
+              id={field.id}
+              key={field.id}
+              buttonContent={
+                field.label ||
+                i18n.translate('customizableForm.builder.fieldFallbackLabel', {
+                  defaultMessage: 'Field {number}',
+                  values: { number: index + 1 },
+                })
+              }
+              paddingSize="s"
+              initialIsOpen={index === 0}
+              extraAction={
+                <EuiToolTip
+                  content={i18n.translate('customizableForm.builder.removeFieldTooltip', {
+                    defaultMessage: 'Remove field',
+                  })}
+                >
+                  <EuiButtonIcon
+                    iconType="trash"
+                    color="danger"
+                    aria-label={i18n.translate('customizableForm.builder.removeFieldAriaLabel', {
+                      defaultMessage: 'Remove field {label}',
+                      values: { label: field.label || index + 1 },
+                    })}
+                    onClick={() => onFieldRemove(field.id)}
+                  />
+                </EuiToolTip>
+              }
+            >
+              <EuiSpacer size="s" />
+
+              <EuiFormRow
+                label={i18n.translate('customizableForm.builder.fieldLabelLabel', {
+                  defaultMessage: 'Label',
                 })}
-                checked={field.required}
-                onChange={(e) => onFieldChange(field.id, { required: e.target.checked })}
+              >
+                <EuiFieldText
+                  value={field.label}
+                  onChange={(e) => onFieldChange(field.id, { label: e.target.value })}
+                />
+              </EuiFormRow>
+
+              <EuiFormRow
+                label={i18n.translate('customizableForm.builder.fieldKeyLabel', {
+                  defaultMessage: 'Variable name',
+                })}
+                helpText={i18n.translate('customizableForm.builder.fieldKeyHelpText', {
+                  defaultMessage: 'Used in the connector template as {example}.',
+                  values: { example: '{{variable_name}}' },
+                })}
+              >
+                <EuiFieldText
+                  value={field.key}
+                  onChange={(e) => onFieldChange(field.id, { key: e.target.value })}
+                />
+              </EuiFormRow>
+
+              <EuiFormRow
+                label={i18n.translate('customizableForm.builder.fieldPlaceholderLabel', {
+                  defaultMessage: 'Placeholder',
+                })}
+              >
+                <EuiFieldText
+                  value={field.placeholder ?? ''}
+                  onChange={(e) => onFieldChange(field.id, { placeholder: e.target.value })}
+                />
+              </EuiFormRow>
+
+              <EuiFormRow
+                label={i18n.translate('customizableForm.builder.fieldTypeLabel', {
+                  defaultMessage: 'Input type',
+                })}
+              >
+                <EuiSelect
+                  options={[
+                    {
+                      value: 'text',
+                      text: i18n.translate('customizableForm.builder.fieldType.text', {
+                        defaultMessage: 'Single line text',
+                      }),
+                    },
+                    {
+                      value: 'textarea',
+                      text: i18n.translate('customizableForm.builder.fieldType.textarea', {
+                        defaultMessage: 'Multiline text',
+                      }),
+                    },
+                  ]}
+                  value={field.type}
+                  onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+                    onFieldChange(field.id, { type: e.target.value as FormFieldType })
+                  }
+                />
+              </EuiFormRow>
+
+              <EuiFormRow display="columnCompressed">
+                <EuiSwitch
+                  label={i18n.translate('customizableForm.builder.fieldRequiredLabel', {
+                    defaultMessage: 'Required',
+                  })}
+                  checked={field.required}
+                  onChange={(e) => onFieldChange(field.id, { required: e.target.checked })}
+                />
+              </EuiFormRow>
+
+              <EuiSpacer size="m" />
+            </EuiAccordion>
+          ))}
+
+          <EuiSpacer size="s" />
+
+          <EuiButton iconType="plusInCircle" onClick={onAddField} size="s">
+            {i18n.translate('customizableForm.builder.addFieldButton', {
+              defaultMessage: 'Add field',
+            })}
+          </EuiButton>
+        </>
+      ) : null}
+
+      {activeTab === 'payload' ? (
+        <>
+          <EuiTitle size="xs">
+            <h3>
+              {i18n.translate('customizableForm.builder.templateSectionTitle', {
+                defaultMessage: 'Connector payload template',
+              })}
+            </h3>
+          </EuiTitle>
+
+          <EuiSpacer size="s" />
+
+          <EuiForm component="div">
+            <EuiFormRow
+              label={i18n.translate('customizableForm.builder.templateLabel', {
+                defaultMessage: 'Document to index',
+              })}
+              helpText={i18n.translate('customizableForm.builder.templateHelpText', {
+                defaultMessage:
+                  'Use the variables defined above to compose a valid JSON document. Example: {example}.',
+                values: { example: '{{message}}' },
+              })}
+            >
+              <EuiTextArea
+                resize="vertical"
+                value={config.documentTemplate}
+                onChange={(e) => onTemplateChange(e.target.value)}
+                aria-label={i18n.translate('customizableForm.builder.templateAriaLabel', {
+                  defaultMessage: 'Connector payload template',
+                })}
+                rows={10}
               />
             </EuiFormRow>
+          </EuiForm>
 
-            <EuiSpacer size="m" />
-          </EuiAccordion>
-        ))}
+          {hasMissingTemplateVariables ? (
+            <>
+              <EuiSpacer size="s" />
+              <EuiText color="danger" size="s">
+                {i18n.translate('customizableForm.builder.templateMissingVariablesLabel', {
+                  defaultMessage:
+                    'The template references variables without matching fields: {variables}.',
+                  values: {
+                    variables: missingTemplateVariables.join(', '),
+                  },
+                })}
+              </EuiText>
+            </>
+          ) : null}
 
-        <EuiSpacer size="s" />
+          {!hasMissingTemplateVariables && unusedTemplateFields.length > 0 ? (
+            <>
+              <EuiSpacer size="s" />
+              <EuiText color="warning" size="s">
+                {i18n.translate('customizableForm.builder.templateUnusedFieldsWarning', {
+                  defaultMessage: 'These fields are not used in the template: {fields}.',
+                  values: {
+                    fields: unusedTemplateFields.map((field) => field.label).join(', '),
+                  },
+                })}
+              </EuiText>
+            </>
+          ) : null}
+        </>
+      ) : null}
 
-        <EuiButton iconType="plusInCircle" onClick={onAddField} size="s">
-          {i18n.translate('customizableForm.builder.addFieldButton', {
-            defaultMessage: 'Add field',
-          })}
-        </EuiButton>
+      <EuiSpacer size="l" />
 
-        <EuiSpacer size="l" />
-
-        <EuiTitle size="xs">
-          <h3>
-            {i18n.translate('customizableForm.builder.templateSectionTitle', {
-              defaultMessage: 'Connector payload template',
+      <EuiFlexGroup justifyContent="flexEnd">
+        <EuiFlexItem grow={false}>
+          <EuiButton fill iconType="save" onClick={onSave} disabled={isSaveDisabled}>
+            {i18n.translate('customizableForm.builder.saveVisualizationButton', {
+              defaultMessage: 'Save Visualization',
             })}
-          </h3>
-        </EuiTitle>
-
-        <EuiSpacer size="s" />
-
-        <EuiFormRow
-          label={i18n.translate('customizableForm.builder.templateLabel', {
-            defaultMessage: 'Document to index',
-          })}
-          helpText={i18n.translate('customizableForm.builder.templateHelpText', {
-            defaultMessage:
-              'Use the variables defined above to compose a valid JSON document. Example: {example}.',
-            values: { example: '{{message}}' },
-          })}
-        >
-          <EuiTextArea
-            resize="vertical"
-            value={config.documentTemplate}
-            onChange={(e) => onTemplateChange(e.target.value)}
-            aria-label={i18n.translate('customizableForm.builder.templateAriaLabel', {
-              defaultMessage: 'Connector payload template',
-            })}
-            rows={10}
-          />
-        </EuiFormRow>
-
-        <EuiSpacer size="l" />
-
-        <EuiFlexGroup justifyContent="flexEnd">
-          <EuiFlexItem grow={false}>
-            <EuiButton fill iconType="save" onClick={onSave}>
-              {i18n.translate('customizableForm.builder.saveVisualizationButton', {
-                defaultMessage: 'Save Visualization',
-              })}
-            </EuiButton>
-          </EuiFlexItem>
-        </EuiFlexGroup>
-      </EuiForm>
+          </EuiButton>
+        </EuiFlexItem>
+      </EuiFlexGroup>
     </EuiPanel>
   );
 };
