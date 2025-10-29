@@ -76,11 +76,19 @@ const DEFAULT_TEMPLATE = `{
   "event_message": "This is an alert raised via Customizable Form. Here's the message: {{message}}"
 }`;
 
+const getConnectorFallbackLabel = (index: number) =>
+  i18n.translate('customizableForm.builder.connectorFallbackLabel', {
+    defaultMessage: 'Connector {number}',
+    values: { number: index + 1 },
+  });
+
 const INITIAL_CONNECTORS: FormConnectorConfig[] = [
   {
     id: 'connector-1',
     connectorTypeId: '',
     connectorId: '',
+    label: getConnectorFallbackLabel(0),
+    isLabelAuto: true,
     documentTemplate: DEFAULT_TEMPLATE,
   },
 ];
@@ -349,7 +357,7 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
       const validTypeIds = new Set<SupportedConnectorTypeId>(connectorTypes.map((type) => type.id));
       let hasChanges = false;
 
-      const nextConnectors = prev.connectors.map((connectorConfig) => {
+      const nextConnectors = prev.connectors.map((connectorConfig, index) => {
         let nextTypeId = connectorConfig.connectorTypeId as SupportedConnectorTypeId | '';
         const currentTypeIsValid =
           nextTypeId !== '' ? validTypeIds.has(nextTypeId as SupportedConnectorTypeId) : false;
@@ -370,15 +378,36 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
           nextConnectorId = connectorsForType[0]?.id ?? '';
         }
 
+        const selectedConnectorInstance = nextConnectorId
+          ? connectors.find((connector) => connector.id === nextConnectorId) ?? null
+          : null;
+        const selectedType = nextTypeId
+          ? connectorTypes.find((type) => type.id === nextTypeId) ?? null
+          : null;
+        const fallbackLabel = getConnectorFallbackLabel(index);
+
+        let nextLabel = connectorConfig.label || '';
+        let nextIsLabelAuto = connectorConfig.isLabelAuto ?? true;
+        if (nextIsLabelAuto) {
+          const defaultLabel =
+            selectedConnectorInstance?.name ?? selectedType?.name ?? fallbackLabel;
+          nextLabel = defaultLabel;
+          nextIsLabelAuto = true;
+        }
+
         if (
           nextTypeId !== connectorConfig.connectorTypeId ||
-          nextConnectorId !== connectorConfig.connectorId
+          nextConnectorId !== connectorConfig.connectorId ||
+          nextLabel !== connectorConfig.label ||
+          nextIsLabelAuto !== connectorConfig.isLabelAuto
         ) {
           hasChanges = true;
           return {
             ...connectorConfig,
             connectorTypeId: nextTypeId,
             connectorId: nextConnectorId,
+            label: nextLabel,
+            isLabelAuto: nextIsLabelAuto,
           };
         }
 
@@ -439,11 +468,17 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
       ? connectors.filter((connector) => connector.actionTypeId === defaultTypeId)
       : [];
     const defaultConnectorId = connectorsForType[0]?.id ?? '';
+    const selectedType = defaultTypeId
+      ? connectorTypes.find((type) => type.id === defaultTypeId) ?? null
+      : null;
+    const defaultLabel = connectorsForType[0]?.name ?? selectedType?.name ?? getConnectorFallbackLabel(Math.max(index - 1, 0));
 
     const newConnector: FormConnectorConfig = {
       id: `connector-${index}`,
       connectorTypeId: defaultTypeId,
       connectorId: defaultConnectorId,
+      label: defaultLabel,
+      isLabelAuto: true,
       documentTemplate: DEFAULT_TEMPLATE,
     };
 
@@ -465,32 +500,72 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
       const canonicalNextTypeId = getCanonicalConnectorTypeId(nextTypeId) ?? '';
       setFormConfig((prev) => ({
         ...prev,
-        connectors: prev.connectors.map((item) => {
+        connectors: prev.connectors.map((item, index) => {
           if (item.id !== connectorConfigId) {
             return item;
           }
           if (item.connectorTypeId === canonicalNextTypeId) {
             return item;
           }
+          const wasLabelAuto = item.isLabelAuto ?? true;
           const connectorsForType = canonicalNextTypeId
             ? connectors.filter((c) => c.actionTypeId === canonicalNextTypeId)
             : [];
+          const selectedType = canonicalNextTypeId
+            ? connectorTypes.find((type) => type.id === canonicalNextTypeId) ?? null
+            : null;
+          const defaultLabel = connectorsForType[0]?.name ?? selectedType?.name ?? getConnectorFallbackLabel(index);
           return {
             ...item,
             connectorTypeId: canonicalNextTypeId,
             connectorId: connectorsForType[0]?.id ?? '',
+            label: wasLabelAuto ? defaultLabel : item.label,
+            isLabelAuto: wasLabelAuto,
           };
         }),
       }));
     },
-    [connectors]
+    [connectors, connectorTypes]
   );
 
-  const handleConnectorChange = useCallback((connectorConfigId: string, nextConnectorId: string) => {
+  const handleConnectorChange = useCallback(
+    (connectorConfigId: string, nextConnectorId: string) => {
+      setFormConfig((prev) => ({
+        ...prev,
+        connectors: prev.connectors.map((item, index) => {
+          if (item.id !== connectorConfigId) {
+            return item;
+          }
+
+          const selectedConnectorInstance = connectors.find((connector) => connector.id === nextConnectorId) ?? null;
+          const selectedType = item.connectorTypeId
+            ? connectorTypes.find((type) => type.id === item.connectorTypeId) ?? null
+            : null;
+          const defaultLabel = selectedConnectorInstance?.name ?? selectedType?.name ?? getConnectorFallbackLabel(index);
+
+          return {
+            ...item,
+            connectorId: nextConnectorId,
+            label: (item.isLabelAuto ?? true) ? defaultLabel : item.label,
+            isLabelAuto: item.isLabelAuto ?? true,
+          };
+        }),
+      }));
+    },
+    [connectors, connectorTypes]
+  );
+
+  const handleConnectorLabelChange = useCallback((connectorConfigId: string, label: string) => {
     setFormConfig((prev) => ({
       ...prev,
       connectors: prev.connectors.map((item) =>
-        item.id === connectorConfigId ? { ...item, connectorId: nextConnectorId } : item
+        item.id === connectorConfigId
+          ? {
+              ...item,
+              label,
+              isLabelAuto: false,
+            }
+          : item
       ),
     }));
   }, []);
@@ -613,23 +688,30 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
     }, {});
   }, [formConfig.connectors, formConfig.fields, fieldValues]);
 
+  const hasEmptyConnectorLabels = useMemo(
+    () => formConfig.connectors.some((connectorConfig) => !(connectorConfig.label || '').trim()),
+    [formConfig.connectors]
+  );
+
   const isSaveDisabled = useMemo(
     () =>
+      hasEmptyConnectorLabels ||
       formConfig.connectors.some(
         (connectorConfig) =>
           (templateValidationByConnector[connectorConfig.id]?.missing.length ?? 0) > 0
       ),
-    [formConfig.connectors, templateValidationByConnector]
+    [formConfig.connectors, templateValidationByConnector, hasEmptyConnectorLabels]
   );
 
   const connectorSummaries = useMemo(
     () =>
-      formConfig.connectors.map((connectorConfig) => ({
+      formConfig.connectors.map((connectorConfig, index) => ({
         config: connectorConfig,
         type: connectorTypes.find((type) => type.id === connectorConfig.connectorTypeId) ?? null,
         connector:
           connectors.find((connectorInstance) => connectorInstance.id === connectorConfig.connectorId) ??
           null,
+        label: (connectorConfig.label || '').trim() || getConnectorFallbackLabel(index),
       })),
     [formConfig.connectors, connectorTypes, connectors]
   );
@@ -638,6 +720,7 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
     // TODO: wire connector execution
     console.log('Test submission triggered', {
       connectors: formConfig.connectors.map((connectorConfig) => ({
+        label: connectorConfig.label,
         connectorTypeId: connectorConfig.connectorTypeId,
         connectorId: connectorConfig.connectorId,
         payload: renderedPayloads[connectorConfig.id] ?? '',
@@ -689,6 +772,7 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
             onShowDescriptionChange={(show) => updateConfig({ showDescription: show })}
             onConnectorTypeChange={handleConnectorTypeChange}
             onConnectorChange={handleConnectorChange}
+            onConnectorLabelChange={handleConnectorLabelChange}
             onConnectorTemplateChange={handleConnectorTemplateChange}
             onConnectorAdd={addConnector}
             onConnectorRemove={removeConnector}
@@ -704,6 +788,7 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
             isLoadingConnectors={isLoadingConnectors}
             connectorTypesError={connectorTypesError}
             connectorsError={connectorsError}
+            hasEmptyConnectorLabels={hasEmptyConnectorLabels}
             isSaveDisabled={isSaveDisabled}
           />
         </EuiFlexItem>
@@ -720,6 +805,7 @@ interface ConfigurationPanelProps {
   onShowDescriptionChange: (value: boolean) => void;
   onConnectorTypeChange: (connectorConfigId: string, value: string) => void;
   onConnectorChange: (connectorConfigId: string, value: string) => void;
+  onConnectorLabelChange: (connectorConfigId: string, value: string) => void;
   onConnectorTemplateChange: (connectorConfigId: string, value: string) => void;
   onConnectorAdd: () => void;
   onConnectorRemove: (connectorConfigId: string) => void;
@@ -735,6 +821,7 @@ interface ConfigurationPanelProps {
   isLoadingConnectors: boolean;
   connectorTypesError: string | null;
   connectorsError: string | null;
+  hasEmptyConnectorLabels: boolean;
   isSaveDisabled: boolean;
 }
 
@@ -748,6 +835,7 @@ const ConfigurationPanel = ({
   onShowDescriptionChange,
   onConnectorTypeChange,
   onConnectorChange,
+  onConnectorLabelChange,
   onConnectorTemplateChange,
   onConnectorAdd,
   onConnectorRemove,
@@ -763,6 +851,7 @@ const ConfigurationPanel = ({
   isLoadingConnectors,
   connectorTypesError,
   connectorsError,
+  hasEmptyConnectorLabels,
   isSaveDisabled,
 }: ConfigurationPanelProps) => {
   const [activeTab, setActiveTab] = useState<ConfigurationTab>('general');
@@ -962,13 +1051,16 @@ const ConfigurationPanel = ({
                 (item) => item.id === connectorConfig.connectorId
               );
 
+              const currentLabel = connectorConfig.label || '';
+              const labelPlaceholder =
+                selectedConnectorInstance?.name ?? selectedType?.name ?? getConnectorFallbackLabel(index);
+              const isLabelInvalid = !currentLabel.trim();
+
               const accordionLabel =
+                currentLabel.trim() ||
                 selectedConnectorInstance?.name ||
                 selectedType?.name ||
-                i18n.translate('customizableForm.builder.connectorSectionFallbackTitle', {
-                  defaultMessage: 'Connector {number}',
-                  values: { number: index + 1 },
-                });
+                getConnectorFallbackLabel(index);
 
               const shouldShowConnectorWarning =
                 !isLoadingConnectors &&
@@ -1004,6 +1096,33 @@ const ConfigurationPanel = ({
                     }
                   >
                     <EuiSpacer size="s" />
+
+                    <EuiFormRow
+                      label={i18n.translate('customizableForm.builder.connectorLabelInputLabel', {
+                        defaultMessage: 'Label',
+                      })}
+                      isInvalid={isLabelInvalid}
+                      error={
+                        isLabelInvalid
+                          ? [
+                              i18n.translate('customizableForm.builder.connectorLabelRequiredError', {
+                                defaultMessage: 'Label is required.',
+                              }),
+                            ]
+                          : undefined
+                      }
+                    >
+                      <EuiFieldText
+                        value={connectorConfig.label}
+                        placeholder={labelPlaceholder}
+                        onChange={(event) =>
+                          onConnectorLabelChange(connectorConfig.id, event.target.value)
+                        }
+                        aria-label={i18n.translate('customizableForm.builder.connectorLabelInputAria', {
+                          defaultMessage: 'Connector label',
+                        })}
+                      />
+                    </EuiFormRow>
 
                     <EuiFormRow
                       label={i18n.translate('customizableForm.builder.connectorTypeLabel', {
@@ -1078,6 +1197,26 @@ const ConfigurationPanel = ({
               defaultMessage: 'Add connector',
             })}
           </EuiButton>
+
+          {hasEmptyConnectorLabels ? (
+            <>
+              <EuiSpacer size="s" />
+              <EuiCallOut
+                color="danger"
+                iconType="alert"
+                size="s"
+                title={i18n.translate('customizableForm.builder.connectorLabelsCalloutTitle', {
+                  defaultMessage: 'Connector labels required',
+                })}
+              >
+                <p>
+                  {i18n.translate('customizableForm.builder.connectorLabelsCalloutBody', {
+                    defaultMessage: 'Provide a label for each connector before saving.',
+                  })}
+                </p>
+              </EuiCallOut>
+            </>
+          ) : null}
         </>
       ) : null}
 
@@ -1258,13 +1397,12 @@ const ConfigurationPanel = ({
                 (item) => item.id === connectorConfig.connectorId
               );
 
+              const currentLabel = connectorConfig.label || '';
               const accordionLabel =
+                currentLabel.trim() ||
                 selectedConnectorInstance?.name ||
                 selectedType?.name ||
-                i18n.translate('customizableForm.builder.payloadSectionFallbackTitle', {
-                  defaultMessage: 'Payload {number}',
-                  values: { number: index + 1 },
-                });
+                getConnectorFallbackLabel(index);
 
               return (
                 <React.Fragment key={`payload-${connectorConfig.id}`}>
@@ -1347,6 +1485,7 @@ const ConfigurationPanel = ({
 interface InfoPanelProps {
   connectorSummaries: Array<{
     config: FormConnectorConfig;
+    label: string;
     type: ActionType & { id: SupportedConnectorTypeId } | null;
     connector: ActionConnector & { actionTypeId: SupportedConnectorTypeId } | null;
   }>;
@@ -1405,39 +1544,62 @@ const InfoPanel = ({ connectorSummaries, renderedPayloads, templateValidationByC
             })}
           </EuiText>
         ) : (
-          connectorSummaries.map(({ config, connector, type }, index) => (
-            <React.Fragment key={`connector-summary-${config.id}`}>
-              <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false}>
-                <EuiFlexItem grow={1}>
-                  <EuiText size="s">
-                    <strong>
-                      {i18n.translate('customizableForm.builder.infoPanel.connectorLabel', {
-                        defaultMessage: 'Connector',
-                      })}
-                      {': '}
-                    </strong>
-                    {connector?.name ??
-                      i18n.translate('customizableForm.builder.infoPanel.connectorFallback', {
-                        defaultMessage: 'Unnamed connector {index}',
-                        values: { index: index + 1 },
-                      })}
-                  </EuiText>
-                </EuiFlexItem>
-                <EuiFlexItem grow={1}>
-                  <EuiText size="s">
-                    <strong>
-                      {i18n.translate('customizableForm.builder.infoPanel.typeLabel', {
-                        defaultMessage: 'Type',
-                      })}
-                      {': '}
-                    </strong>
-                    {type?.name ?? connector?.actionTypeId ?? '—'}
-                  </EuiText>
-                </EuiFlexItem>
-              </EuiFlexGroup>
-              {index < connectorSummaries.length - 1 ? <EuiSpacer size="s" /> : null}
-            </React.Fragment>
-          ))
+          <>
+            <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false}>
+              <EuiFlexItem grow={1}>
+                <EuiText size="xs" color="subdued">
+                  <strong>
+                    {i18n.translate('customizableForm.builder.infoPanel.labelHeader', {
+                      defaultMessage: 'Label',
+                    })}
+                  </strong>
+                </EuiText>
+              </EuiFlexItem>
+              <EuiFlexItem grow={1}>
+                <EuiText size="xs" color="subdued">
+                  <strong>
+                    {i18n.translate('customizableForm.builder.infoPanel.connectorHeader', {
+                      defaultMessage: 'Connector',
+                    })}
+                  </strong>
+                </EuiText>
+              </EuiFlexItem>
+              <EuiFlexItem grow={1}>
+                <EuiText size="xs" color="subdued">
+                  <strong>
+                    {i18n.translate('customizableForm.builder.infoPanel.typeHeader', {
+                      defaultMessage: 'Type',
+                    })}
+                  </strong>
+                </EuiText>
+              </EuiFlexItem>
+            </EuiFlexGroup>
+
+            <EuiSpacer size="xs" />
+
+            {connectorSummaries.map(({ config, connector, type, label }, index) => (
+              <React.Fragment key={`connector-summary-${config.id}`}>
+                <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false}>
+                  <EuiFlexItem grow={1}>
+                    <EuiText size="s">{label}</EuiText>
+                  </EuiFlexItem>
+                  <EuiFlexItem grow={1}>
+                    <EuiText size="s">
+                      {connector?.name ??
+                        i18n.translate('customizableForm.builder.infoPanel.connectorFallback', {
+                          defaultMessage: 'Unnamed connector {index}',
+                          values: { index: index + 1 },
+                        })}
+                    </EuiText>
+                  </EuiFlexItem>
+                  <EuiFlexItem grow={1}>
+                    <EuiText size="s">{type?.name ?? connector?.actionTypeId ?? '—'}</EuiText>
+                  </EuiFlexItem>
+                </EuiFlexGroup>
+                {index < connectorSummaries.length - 1 ? <EuiSpacer size="s" /> : null}
+              </React.Fragment>
+            ))}
+          </>
         )}
       </section>
 
@@ -1473,25 +1635,15 @@ const InfoPanel = ({ connectorSummaries, renderedPayloads, templateValidationByC
         ) : (
           <>
             <EuiTabs>
-              {connectorSummaries.map(({ config, connector, type }, index) => {
-                const label =
-                  connector?.name ||
-                  type?.name ||
-                  i18n.translate('customizableForm.builder.infoPanel.payloadTabFallback', {
-                    defaultMessage: 'Payload {index}',
-                    values: { index: index + 1 },
-                  });
-
-                return (
-                  <EuiTab
-                    key={`payload-tab-${config.id}`}
-                    isSelected={activePayloadId === config.id}
-                    onClick={() => setActivePayloadId(config.id)}
-                  >
-                    {label}
-                  </EuiTab>
-                );
-              })}
+              {connectorSummaries.map(({ config, label }) => (
+                <EuiTab
+                  key={`payload-tab-${config.id}`}
+                  isSelected={activePayloadId === config.id}
+                  onClick={() => setActivePayloadId(config.id)}
+                >
+                  {label}
+                </EuiTab>
+              ))}
             </EuiTabs>
 
             <EuiSpacer size="m" />

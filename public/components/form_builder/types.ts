@@ -15,6 +15,8 @@ export interface FormConnectorConfig {
   id: string;
   connectorTypeId: SupportedConnectorTypeId | '';
   connectorId: string;
+  label: string;
+  isLabelAuto: boolean;
   documentTemplate: string;
 }
 
