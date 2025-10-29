@@ -31,6 +31,7 @@ import {
   EuiTitle,
   EuiToolTip,
 } from '@elastic/eui';
+import { css } from '@emotion/react';
 import { loadActionTypes, loadAllActions } from '@kbn/triggers-actions-ui-plugin/public/common/constants';
 import type { ActionType } from '@kbn/actions-types';
 import type { ActionConnector } from '@kbn/alerts-ui-shared/src/common/types';
@@ -193,6 +194,12 @@ const PreviewCard = ({ config, fieldValues, onFieldValueChange, isSubmitDisabled
     />
   </EuiPanel>
 );
+
+const previewInputPlaceholderStyles = css`
+  ::placeholder {
+    font-style: italic;
+  }
+`;
 
 export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFormBuilderProps) => {
   const [formConfig, setFormConfig] = useState<FormConfig>(INITIAL_CONFIG);
@@ -1241,6 +1248,7 @@ const PreviewContent = ({
                   aria-label={field.label || field.key}
                   value={fieldValues[field.id] ?? ''}
                   onChange={(event) => onFieldValueChange(field.id, event.target.value)}
+                  css={previewInputPlaceholderStyles}
                 />
               ) : (
                 <EuiFieldText
@@ -1248,6 +1256,7 @@ const PreviewContent = ({
                   aria-label={field.label || field.key}
                   value={fieldValues[field.id] ?? ''}
                   onChange={(event) => onFieldValueChange(field.id, event.target.value)}
+                  css={previewInputPlaceholderStyles}
                 />
               )}
             </EuiFormRow>
