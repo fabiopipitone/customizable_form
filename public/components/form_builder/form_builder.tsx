@@ -1233,34 +1233,26 @@ const PreviewContent = ({
                       })}
                 </EuiText>
               }
-              helpText={
-                field.key
-                  ? i18n.translate('customizableForm.builder.previewVariableInfo', {
-                      defaultMessage: 'Variable: {variable}',
-                      values: { variable: `{{${field.key}}}` },
-                    })
-                  : undefined
-              }
             >
-              {field.type === 'textarea' ? (
-                <EuiTextArea
-                  placeholder={field.placeholder}
-                  aria-label={field.label || field.key}
-                  value={fieldValues[field.id] ?? ''}
-                  onChange={(event) => onFieldValueChange(field.id, event.target.value)}
-                  css={previewInputPlaceholderStyles}
-                />
-              ) : (
-                <EuiFieldText
-                  placeholder={field.placeholder}
-                  aria-label={field.label || field.key}
-                  value={fieldValues[field.id] ?? ''}
-                  onChange={(event) => onFieldValueChange(field.id, event.target.value)}
-                  css={previewInputPlaceholderStyles}
-                />
-              )}
-            </EuiFormRow>
-          ))}
+      {field.type === 'textarea' ? (
+        <EuiTextArea
+          placeholder={field.placeholder}
+          aria-label={field.label || field.key}
+          value={fieldValues[field.id] ?? ''}
+          onChange={(event) => onFieldValueChange(field.id, event.target.value)}
+          css={previewInputPlaceholderStyles}
+        />
+      ) : (
+        <EuiFieldText
+          placeholder={field.placeholder}
+          aria-label={field.label || field.key}
+          value={fieldValues[field.id] ?? ''}
+          onChange={(event) => onFieldValueChange(field.id, event.target.value)}
+          css={previewInputPlaceholderStyles}
+        />
+      )}
+    </EuiFormRow>
+  ))}
 
           <EuiSpacer size="m" />
 
