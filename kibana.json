@@ -14,10 +14,13 @@
     "visualizations",
     "share",
     "data",
-    "actions"
+    "actions",
+    "savedObjects",
+    "presentationUtil"
   ],
   "requiredBundles": [
-    "triggersActionsUi"
+    "triggersActionsUi",
+    "presentationUtil"
   ],
   "optionalPlugins": []
 }

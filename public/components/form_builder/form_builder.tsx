@@ -8,6 +8,13 @@ import React, {
 } from 'react';
 import { i18n } from '@kbn/i18n';
 import type { CoreStart, NotificationsStart } from '@kbn/core/public';
+import { showSaveModal } from '@kbn/saved-objects-plugin/public';
+import type { NavigationPublicPluginStart, TopNavMenuData } from '@kbn/navigation-plugin/public';
+import {
+  LazySavedObjectSaveModalDashboard,
+  type SaveModalDashboardProps,
+  withSuspense,
+} from '@kbn/presentation-util-plugin/public';
 import {
   EuiAccordion,
   EuiButton,
@@ -44,10 +51,15 @@ import {
   FormConnectorConfig,
   SupportedConnectorTypeId,
 } from './types';
+import { serializeFormConfigToJson } from './serialization';
+import { PLUGIN_ID } from '../../../common';
+
+const SavedObjectSaveModalDashboard = withSuspense(LazySavedObjectSaveModalDashboard);
 
 interface CustomizableFormBuilderProps {
   notifications: NotificationsStart;
   http: CoreStart['http'];
+  navigation: NavigationPublicPluginStart;
 }
 
 const CONNECTOR_TYPE_CANONICAL: Record<string, SupportedConnectorTypeId> = {
@@ -251,7 +263,7 @@ type ConnectorSelectionStateEntry = {
   hasSelection: boolean;
 };
 
-export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFormBuilderProps) => {
+export const CustomizableFormBuilder = ({ notifications, http, navigation }: CustomizableFormBuilderProps) => {
   const [formConfig, setFormConfig] = useState<FormConfig>(INITIAL_CONFIG);
   const fieldCounter = useRef<number>(INITIAL_CONFIG.fields.length);
   const connectorCounter = useRef<number>(INITIAL_CONFIG.connectors.length);
@@ -695,11 +707,6 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
     []
   );
 
-  const handleSaveVisualization = useCallback(() => {
-    // TODO: replace with Kibana save modal integration
-    console.log('Save visualization requested', formConfig);
-  }, [formConfig]);
-
   useEffect(() => {
     setFieldValues((prev) => {
       const next: Record<string, string> = {};
@@ -888,6 +895,52 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
     [formConfig.connectors, connectorSelectionState]
   );
 
+  const handleSaveVisualizationRequest = useCallback(() => {
+    const serializedState = serializeFormConfigToJson(formConfig);
+
+    const handleModalSave: SaveModalDashboardProps['onSave'] = async ({
+      newTitle,
+      newDescription,
+      dashboardId,
+      addToLibrary,
+    }) => {
+      // Placeholder: wire up persistence + dashboard redirect in a later step.
+      // eslint-disable-next-line no-console
+      console.log('Customizable Form save payload', {
+        title: newTitle,
+        description: newDescription,
+        addToLibrary,
+        dashboardId,
+        state: serializedState,
+      });
+
+      toasts.addInfo({
+        title: i18n.translate('customizableForm.builder.saveVisualizationPlaceholderTitle', {
+          defaultMessage: 'Save not yet implemented',
+        }),
+        text: i18n.translate('customizableForm.builder.saveVisualizationPlaceholderBody', {
+          defaultMessage: 'Serialized configuration logged to the browser console.',
+        }),
+      });
+    };
+
+    showSaveModal(
+      <SavedObjectSaveModalDashboard
+        documentInfo={{
+          id: undefined,
+          title: formConfig.title,
+          description: formConfig.description,
+        }}
+        canSaveByReference={true}
+        objectType={i18n.translate('customizableForm.builder.saveModal.objectType', {
+          defaultMessage: 'custom form',
+        })}
+        onSave={handleModalSave}
+        onClose={() => {}}
+      />
+    );
+  }, [formConfig, toasts]);
+
   const isSaveDisabled = useMemo(
     () =>
       hasEmptyConnectorLabels ||
@@ -902,6 +955,21 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
       hasEmptyConnectorLabels,
       hasInvalidConnectorSelections,
     ]
+  );
+
+  const topNavConfig = useMemo<TopNavMenuData[]>(
+    () => [
+      {
+        id: 'customizableFormSave',
+        label: i18n.translate('customizableForm.builder.topNav.saveLabel', {
+          defaultMessage: 'Save',
+        }),
+        run: handleSaveVisualizationRequest,
+        disableButton: isSaveDisabled,
+        testId: 'customizableFormSaveButton',
+      },
+    ],
+    [handleSaveVisualizationRequest, isSaveDisabled]
   );
 
   const connectorSummaries = useMemo(
@@ -943,6 +1011,13 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
         boxSizing: 'border-box',
       }}
     >
+      <navigation.ui.TopNavMenu
+        appName={PLUGIN_ID}
+        showSearchBar={false}
+        useDefaultBehaviors={true}
+        config={topNavConfig}
+      />
+
       <EuiFlexGroup gutterSize="m" alignItems="stretch">
         <EuiFlexItem grow={4}>
           <EuiFlexGroup direction="column" gutterSize="m">
@@ -981,7 +1056,6 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
             onFieldChange={updateField}
             onFieldRemove={removeField}
             onAddField={addField}
-            onSave={handleSaveVisualization}
             connectorTypeOptions={connectorTypeOptions}
             connectorTypes={connectorTypes}
             connectorsByType={connectorsByType}
@@ -994,6 +1068,7 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
             connectorsError={connectorsError}
             hasEmptyConnectorLabels={hasEmptyConnectorLabels}
             isSaveDisabled={isSaveDisabled}
+            onSaveRequest={handleSaveVisualizationRequest}
           />
         </EuiFlexItem>
       </EuiFlexGroup>
@@ -1016,7 +1091,7 @@ interface ConfigurationPanelProps {
   onFieldChange: (fieldId: string, changes: Partial<FormFieldConfig>) => void;
   onFieldRemove: (fieldId: string) => void;
   onAddField: () => void;
-  onSave: () => void;
+  onSaveRequest: () => void;
   connectorTypeOptions: Array<{ value: string; text: string }>;
   connectorTypes: Array<ActionType & { id: SupportedConnectorTypeId }>;
   connectorsByType: Record<string, Array<ActionConnector & { actionTypeId: SupportedConnectorTypeId }>>;
@@ -1048,7 +1123,7 @@ const ConfigurationPanel = ({
   onFieldChange,
   onFieldRemove,
   onAddField,
-  onSave,
+  onSaveRequest,
   connectorTypeOptions,
   connectorTypes,
   connectorsByType,
@@ -1700,11 +1775,11 @@ const ConfigurationPanel = ({
 
       <EuiFlexGroup justifyContent="flexEnd">
         <EuiFlexItem grow={false}>
-          <EuiButton fill iconType="save" onClick={onSave} disabled={isSaveDisabled}>
-            {i18n.translate('customizableForm.builder.saveVisualizationButton', {
-              defaultMessage: 'Save Visualization',
-            })}
-          </EuiButton>
+            <EuiButton fill iconType="save" onClick={onSaveRequest} disabled={isSaveDisabled}>
+              {i18n.translate('customizableForm.builder.saveVisualizationButton', {
+                defaultMessage: 'Save Visualization',
+              })}
+            </EuiButton>
         </EuiFlexItem>
       </EuiFlexGroup>
     </EuiPanel>
