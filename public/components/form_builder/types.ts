@@ -9,13 +9,20 @@ export interface FormFieldConfig {
   required: boolean;
 }
 
+export type SupportedConnectorTypeId = '.index' | '.webhook';
+
+export interface FormConnectorConfig {
+  id: string;
+  connectorTypeId: SupportedConnectorTypeId | '';
+  connectorId: string;
+  documentTemplate: string;
+}
+
 export interface FormConfig {
   title: string;
   description: string;
   showTitle: boolean;
   showDescription: boolean;
-  connectorTypeId: string;
-  connectorId: string;
-  documentTemplate: string;
+  connectors: FormConnectorConfig[];
   fields: FormFieldConfig[];
 }
