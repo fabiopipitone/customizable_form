@@ -20,6 +20,7 @@ import {
   EuiFlexItem,
   EuiForm,
   EuiFormRow,
+  EuiIcon,
   EuiPanel,
   EuiSelect,
   EuiSpacer,
@@ -228,6 +229,27 @@ const connectorSummaryRowBaseStyles = css`
 const connectorSummaryHeaderTextStyles = css`
   font-size: 0.95rem;
 `;
+
+type ConnectorStatus = {
+  hasWarning: boolean;
+  hasError: boolean;
+  hasTemplateWarning: boolean;
+  hasTemplateError: boolean;
+};
+
+const DEFAULT_CONNECTOR_STATUS: ConnectorStatus = {
+  hasWarning: false,
+  hasError: false,
+  hasTemplateWarning: false,
+  hasTemplateError: false,
+};
+
+type ConnectorSelectionStateEntry = {
+  connectorsForType: Array<ActionConnector & { actionTypeId: SupportedConnectorTypeId }>;
+  availableConnectors: Array<ActionConnector & { actionTypeId: SupportedConnectorTypeId }>;
+  hasType: boolean;
+  hasSelection: boolean;
+};
 
 export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFormBuilderProps) => {
   const [formConfig, setFormConfig] = useState<FormConfig>(INITIAL_CONFIG);
@@ -720,6 +742,42 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
       .filter((key) => key.length > 0);
   }, [formConfig.fields]);
 
+  const connectorSelectionState = useMemo(() => {
+    const state: Record<string, ConnectorSelectionStateEntry> = {};
+
+    formConfig.connectors.forEach((connectorConfig) => {
+      const connectorsForType = connectorConfig.connectorTypeId
+        ? connectors.filter((connector) => connector.actionTypeId === connectorConfig.connectorTypeId)
+        : [];
+
+      const takenConnectorIds = new Set(
+        formConfig.connectors
+          .filter((item) => item.id !== connectorConfig.id)
+          .map((item) => item.connectorId)
+          .filter((id): id is string => Boolean(id))
+      );
+
+      const availableConnectors = connectorsForType.filter(
+        (connector) => connector.id === connectorConfig.connectorId || !takenConnectorIds.has(connector.id)
+      );
+
+      const hasType = Boolean(connectorConfig.connectorTypeId);
+      const hasSelection =
+        hasType &&
+        Boolean(connectorConfig.connectorId) &&
+        availableConnectors.some((connector) => connector.id === connectorConfig.connectorId);
+
+      state[connectorConfig.id] = {
+        connectorsForType,
+        availableConnectors,
+        hasType,
+        hasSelection,
+      };
+    });
+
+    return state;
+  }, [formConfig.connectors, connectors]);
+
   const templateValidationByConnector = useMemo(() => {
     const definedKeys = new Set(fieldKeys);
     return formConfig.connectors.reduce<Record<string, { missing: string[]; unused: Array<{ key: string; label: string }> }>>(
@@ -749,6 +807,43 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
       {}
     );
   }, [formConfig.connectors, formConfig.fields, fieldKeys]);
+
+  const connectorStatusById = useMemo(() => {
+    const status: Record<string, ConnectorStatus> = {};
+
+    formConfig.connectors.forEach((connectorConfig) => {
+      const selection = connectorSelectionState[connectorConfig.id];
+      const validation = templateValidationByConnector[connectorConfig.id] ?? {
+        missing: [],
+        unused: [],
+      };
+
+      const hasLabelError = !(connectorConfig.label || '').trim();
+      const hasType = selection?.hasType ?? false;
+      const hasSelection = selection?.hasSelection ?? false;
+      const availableCount = selection?.availableConnectors.length ?? 0;
+
+      const hasSelectionWarning =
+        !isLoadingConnectors && hasType && availableCount === 0;
+      const hasSelectionError = hasType && !hasSelection;
+      const hasTypeError = !hasType;
+
+      const hasWarning = hasSelectionWarning;
+      const hasError = hasLabelError || hasSelectionError || hasTypeError;
+
+      const hasTemplateError = validation.missing.length > 0;
+      const hasTemplateWarning = validation.unused.length > 0;
+
+      status[connectorConfig.id] = {
+        hasWarning,
+        hasError,
+        hasTemplateWarning,
+        hasTemplateError,
+      };
+    });
+
+    return status;
+  }, [formConfig.connectors, connectorSelectionState, templateValidationByConnector, isLoadingConnectors]);
 
   const isSubmitDisabled = useMemo(
     () =>
@@ -784,14 +879,29 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
     [formConfig.connectors]
   );
 
+  const hasInvalidConnectorSelections = useMemo(
+    () =>
+      formConfig.connectors.some((connectorConfig) => {
+        const state = connectorSelectionState[connectorConfig.id];
+        return !state || !state.hasSelection;
+      }),
+    [formConfig.connectors, connectorSelectionState]
+  );
+
   const isSaveDisabled = useMemo(
     () =>
       hasEmptyConnectorLabels ||
+      hasInvalidConnectorSelections ||
       formConfig.connectors.some(
         (connectorConfig) =>
           (templateValidationByConnector[connectorConfig.id]?.missing.length ?? 0) > 0
       ),
-    [formConfig.connectors, templateValidationByConnector, hasEmptyConnectorLabels]
+    [
+      formConfig.connectors,
+      templateValidationByConnector,
+      hasEmptyConnectorLabels,
+      hasInvalidConnectorSelections,
+    ]
   );
 
   const connectorSummaries = useMemo(
@@ -803,8 +913,9 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
           connectors.find((connectorInstance) => connectorInstance.id === connectorConfig.connectorId) ??
           null,
         label: (connectorConfig.label || '').trim() || getConnectorFallbackLabel(index),
+        status: connectorStatusById[connectorConfig.id] ?? DEFAULT_CONNECTOR_STATUS,
       })),
-    [formConfig.connectors, connectorTypes, connectors]
+    [formConfig.connectors, connectorTypes, connectors, connectorStatusById]
   );
 
   const handleTestSubmission = useCallback(() => {
@@ -875,6 +986,8 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
             connectorTypes={connectorTypes}
             connectorsByType={connectorsByType}
             templateValidationByConnector={templateValidationByConnector}
+            connectorStatusById={connectorStatusById}
+            connectorSelectionState={connectorSelectionState}
             isLoadingConnectorTypes={isLoadingConnectorTypes}
             isLoadingConnectors={isLoadingConnectors}
             connectorTypesError={connectorTypesError}
@@ -908,6 +1021,8 @@ interface ConfigurationPanelProps {
   connectorTypes: Array<ActionType & { id: SupportedConnectorTypeId }>;
   connectorsByType: Record<string, Array<ActionConnector & { actionTypeId: SupportedConnectorTypeId }>>;
   templateValidationByConnector: Record<string, { missing: string[]; unused: Array<{ key: string; label: string }> }>;
+  connectorStatusById: Record<string, ConnectorStatus>;
+  connectorSelectionState: Record<string, ConnectorSelectionStateEntry>;
   isLoadingConnectorTypes: boolean;
   isLoadingConnectors: boolean;
   connectorTypesError: string | null;
@@ -938,6 +1053,8 @@ const ConfigurationPanel = ({
   connectorTypes,
   connectorsByType,
   templateValidationByConnector,
+  connectorStatusById,
+  connectorSelectionState,
   isLoadingConnectorTypes,
   isLoadingConnectors,
   connectorTypesError,
@@ -1111,20 +1228,10 @@ const ConfigurationPanel = ({
             />
           ) : (
             config.connectors.map((connectorConfig, index) => {
-              const connectorsForType = connectorConfig.connectorTypeId
-                ? connectorsByType[connectorConfig.connectorTypeId] ?? []
-                : [];
-
-              const takenConnectorIds = new Set(
-                config.connectors
-                  .filter((item) => item.id !== connectorConfig.id)
-                  .map((item) => item.connectorId)
-                  .filter((id): id is string => Boolean(id))
-              );
-
-              const availableConnectorsForType = connectorsForType.filter(
-                (connector) => connector.id === connectorConfig.connectorId || !takenConnectorIds.has(connector.id)
-              );
+              const selectionState = connectorSelectionState[connectorConfig.id];
+              const connectorsForType = selectionState?.connectorsForType ?? [];
+              const availableConnectorsForType = selectionState?.availableConnectors ?? [];
+              const connectorStatus = connectorStatusById[connectorConfig.id] ?? DEFAULT_CONNECTOR_STATUS;
 
               const connectorSelectOptions = [
                 {
@@ -1164,16 +1271,24 @@ const ConfigurationPanel = ({
                 selectedType?.name ||
                 getConnectorFallbackLabel(index);
 
-              const shouldShowConnectorWarning =
-                !isLoadingConnectors &&
-                !!connectorConfig.connectorTypeId &&
-                availableConnectorsForType.length === 0;
+              const showConnectorErrorIcon = connectorStatus.hasError;
+              const showConnectorWarningIcon = !connectorStatus.hasError && connectorStatus.hasWarning;
+
+              const connectorAccordionLabel = (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span>{accordionLabel}</span>
+                  {showConnectorErrorIcon ? <EuiIcon type="alert" color="danger" size="s" /> : null}
+                  {showConnectorWarningIcon ? <EuiIcon type="warning" color="warning" size="s" /> : null}
+                </span>
+              );
+
+              const shouldShowConnectorWarning = connectorStatus.hasWarning;
 
               return (
                 <React.Fragment key={connectorConfig.id}>
                   <EuiAccordion
                     id={connectorConfig.id}
-                    buttonContent={accordionLabel}
+                    buttonContent={connectorAccordionLabel}
                     paddingSize="s"
                     initialIsOpen={index === 0}
                     extraAction={
@@ -1506,11 +1621,23 @@ const ConfigurationPanel = ({
                 selectedType?.name ||
                 getConnectorFallbackLabel(index);
 
+              const connectorStatus = connectorStatusById[connectorConfig.id] ?? DEFAULT_CONNECTOR_STATUS;
+              const showTemplateErrorIcon = connectorStatus.hasTemplateError;
+              const showTemplateWarningIcon =
+                !connectorStatus.hasTemplateError && connectorStatus.hasTemplateWarning;
+              const templateAccordionLabel = (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span>{accordionLabel}</span>
+                  {showTemplateErrorIcon ? <EuiIcon type="alert" color="danger" size="s" /> : null}
+                  {showTemplateWarningIcon ? <EuiIcon type="warning" color="warning" size="s" /> : null}
+                </span>
+              );
+
               return (
                 <React.Fragment key={`payload-${connectorConfig.id}`}>
                   <EuiAccordion
                     id={`payload-${connectorConfig.id}`}
-                    buttonContent={accordionLabel}
+                    buttonContent={templateAccordionLabel}
                     paddingSize="s"
                     initialIsOpen={index === 0}
                   >
@@ -1590,6 +1717,7 @@ interface InfoPanelProps {
     label: string;
     type: ActionType & { id: SupportedConnectorTypeId } | null;
     connector: ActionConnector & { actionTypeId: SupportedConnectorTypeId } | null;
+    status: ConnectorStatus;
   }>;
   renderedPayloads: Record<string, string>;
   templateValidationByConnector: Record<string, { missing: string[]; unused: Array<{ key: string; label: string }> }>;
@@ -1658,36 +1786,40 @@ const InfoPanel = ({ connectorSummaries, renderedPayloads, templateValidationByC
             >
               <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false}>
                 <EuiFlexItem grow={1}>
-                <EuiText size="xs" color="subdued" css={connectorSummaryHeaderTextStyles}>
-                  <strong>
-                    {i18n.translate('customizableForm.builder.infoPanel.labelHeader', {
-                      defaultMessage: 'Label',
-                    })}
-                  </strong>
-                </EuiText>
-              </EuiFlexItem>
-              <EuiFlexItem grow={1}>
-                <EuiText size="xs" color="subdued" css={connectorSummaryHeaderTextStyles}>
-                  <strong>
-                    {i18n.translate('customizableForm.builder.infoPanel.connectorHeader', {
-                      defaultMessage: 'Connector',
-                    })}
-                  </strong>
-                </EuiText>
-              </EuiFlexItem>
-              <EuiFlexItem grow={1}>
-                <EuiText size="xs" color="subdued" css={connectorSummaryHeaderTextStyles}>
-                  <strong>
-                    {i18n.translate('customizableForm.builder.infoPanel.typeHeader', {
-                      defaultMessage: 'Type',
-                    })}
-                  </strong>
+                  <EuiText size="xs" color="subdued" css={connectorSummaryHeaderTextStyles}>
+                    <strong>
+                      {i18n.translate('customizableForm.builder.infoPanel.labelHeader', {
+                        defaultMessage: 'Label',
+                      })}
+                    </strong>
+                  </EuiText>
+                </EuiFlexItem>
+                <EuiFlexItem grow={1}>
+                  <EuiText size="xs" color="subdued" css={connectorSummaryHeaderTextStyles}>
+                    <strong>
+                      {i18n.translate('customizableForm.builder.infoPanel.connectorHeader', {
+                        defaultMessage: 'Connector',
+                      })}
+                    </strong>
+                  </EuiText>
+                </EuiFlexItem>
+                <EuiFlexItem grow={1}>
+                  <EuiText size="xs" color="subdued" css={connectorSummaryHeaderTextStyles}>
+                    <strong>
+                      {i18n.translate('customizableForm.builder.infoPanel.typeHeader', {
+                        defaultMessage: 'Type',
+                      })}
+                    </strong>
                   </EuiText>
                 </EuiFlexItem>
               </EuiFlexGroup>
             </div>
 
-            {connectorSummaries.map(({ config, connector, type, label }, index) => (
+            {connectorSummaries.map(({ config, connector, type, label, status }, index) => {
+              const emphasizeError = status.hasError || status.hasTemplateError;
+              const emphasizeWarning = !emphasizeError && (status.hasWarning || status.hasTemplateWarning);
+
+              return (
               <div
                 key={`connector-summary-${config.id}`}
                 css={[
@@ -1700,7 +1832,13 @@ const InfoPanel = ({ connectorSummaries, renderedPayloads, templateValidationByC
               >
                 <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false}>
                   <EuiFlexItem grow={1}>
-                    <EuiText size="s">{label}</EuiText>
+                    <EuiText size="s">
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        {emphasizeError ? <EuiIcon type="alert" color="danger" size="s" /> : null}
+                        {emphasizeWarning ? <EuiIcon type="warning" color="warning" size="s" /> : null}
+                        <span>{label}</span>
+                      </span>
+                    </EuiText>
                   </EuiFlexItem>
                   <EuiFlexItem grow={1}>
                     <EuiText size="s">
@@ -1716,7 +1854,8 @@ const InfoPanel = ({ connectorSummaries, renderedPayloads, templateValidationByC
                   </EuiFlexItem>
                 </EuiFlexGroup>
               </div>
-            ))}
+            );
+            })}
           </>
         )}
       </section>
@@ -1753,13 +1892,22 @@ const InfoPanel = ({ connectorSummaries, renderedPayloads, templateValidationByC
         ) : (
           <>
             <EuiTabs>
-              {connectorSummaries.map(({ config, label }) => (
+              {connectorSummaries.map(({ config, label, status }) => (
                 <EuiTab
                   key={`payload-tab-${config.id}`}
                   isSelected={activePayloadId === config.id}
                   onClick={() => setActivePayloadId(config.id)}
                 >
-                  {label}
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <span>{label}</span>
+                    {status.hasTemplateError || status.hasError ? (
+                      <EuiIcon type="alert" color="danger" size="s" />
+                    ) : null}
+                    {!status.hasTemplateError && !status.hasError &&
+                    (status.hasTemplateWarning || status.hasWarning) ? (
+                      <EuiIcon type="warning" color="warning" size="s" />
+                    ) : null}
+                  </span>
                 </EuiTab>
               ))}
             </EuiTabs>
