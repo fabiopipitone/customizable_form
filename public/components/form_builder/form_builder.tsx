@@ -369,13 +369,24 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
           ? connectors.filter((connector) => connector.actionTypeId === nextTypeId)
           : [];
 
+        const takenConnectorIds = new Set(
+          prev.connectors
+            .filter((item) => item.id !== connectorConfig.id)
+            .map((item) => item.connectorId)
+            .filter((id): id is string => Boolean(id))
+        );
+
+        const availableConnectorsForType = connectorsForType.filter(
+          (connector) => !takenConnectorIds.has(connector.id)
+        );
+
         let nextConnectorId = connectorConfig.connectorId;
         const connectorIsValid = nextConnectorId
-          ? connectorsForType.some((connector) => connector.id === nextConnectorId)
+          ? availableConnectorsForType.some((connector) => connector.id === nextConnectorId)
           : false;
 
         if (!connectorIsValid) {
-          nextConnectorId = connectorsForType[0]?.id ?? '';
+          nextConnectorId = availableConnectorsForType[0]?.id ?? '';
         }
 
         const selectedConnectorInstance = nextConnectorId
@@ -463,29 +474,45 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
   const addConnector = useCallback(() => {
     connectorCounter.current += 1;
     const index = connectorCounter.current;
-    const defaultTypeId = connectorTypes[0]?.id ?? '';
-    const connectorsForType = defaultTypeId
-      ? connectors.filter((connector) => connector.actionTypeId === defaultTypeId)
-      : [];
-    const defaultConnectorId = connectorsForType[0]?.id ?? '';
-    const selectedType = defaultTypeId
-      ? connectorTypes.find((type) => type.id === defaultTypeId) ?? null
-      : null;
-    const defaultLabel = connectorsForType[0]?.name ?? selectedType?.name ?? getConnectorFallbackLabel(Math.max(index - 1, 0));
 
-    const newConnector: FormConnectorConfig = {
-      id: `connector-${index}`,
-      connectorTypeId: defaultTypeId,
-      connectorId: defaultConnectorId,
-      label: defaultLabel,
-      isLabelAuto: true,
-      documentTemplate: DEFAULT_TEMPLATE,
-    };
+    setFormConfig((prev) => {
+      const takenConnectorIds = new Set(
+        prev.connectors.map((connectorConfig) => connectorConfig.connectorId).filter((id) => id)
+      );
 
-    setFormConfig((prev) => ({
-      ...prev,
-      connectors: [...prev.connectors, newConnector],
-    }));
+      const defaultTypeId = connectorTypes[0]?.id ?? '';
+      const allConnectorsForType = defaultTypeId
+        ? connectors.filter((connector) => connector.actionTypeId === defaultTypeId)
+        : [];
+      const availableConnectorsForType = allConnectorsForType.filter(
+        (connector) => !takenConnectorIds.has(connector.id)
+      );
+      const defaultConnectorId = availableConnectorsForType[0]?.id ?? '';
+
+      const selectedType = defaultTypeId
+        ? connectorTypes.find((type) => type.id === defaultTypeId) ?? null
+        : null;
+      const selectedConnector = defaultConnectorId
+        ? connectors.find((connector) => connector.id === defaultConnectorId) ?? null
+        : null;
+
+      const defaultLabel =
+        selectedConnector?.name ?? selectedType?.name ?? getConnectorFallbackLabel(prev.connectors.length);
+
+      const newConnector: FormConnectorConfig = {
+        id: `connector-${index}`,
+        connectorTypeId: defaultTypeId,
+        connectorId: defaultConnectorId,
+        label: defaultLabel,
+        isLabelAuto: true,
+        documentTemplate: DEFAULT_TEMPLATE,
+      };
+
+      return {
+        ...prev,
+        connectors: [...prev.connectors, newConnector],
+      };
+    });
   }, [connectorTypes, connectors]);
 
   const removeConnector = useCallback((connectorConfigId: string) => {
@@ -507,18 +534,46 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
           if (item.connectorTypeId === canonicalNextTypeId) {
             return item;
           }
+
           const wasLabelAuto = item.isLabelAuto ?? true;
-          const connectorsForType = canonicalNextTypeId
+
+          const connectorsForTypeAll = canonicalNextTypeId
             ? connectors.filter((c) => c.actionTypeId === canonicalNextTypeId)
             : [];
+
+          const takenConnectorIds = new Set(
+            prev.connectors
+              .filter((connectorConfig) => connectorConfig.id !== connectorConfigId)
+              .map((connectorConfig) => connectorConfig.connectorId)
+              .filter((id): id is string => Boolean(id))
+          );
+
+          const availableConnectorsForType = connectorsForTypeAll.filter(
+            (connector) => !takenConnectorIds.has(connector.id)
+          );
+
+          const currentConnectorIsAvailable = item.connectorId
+            ? availableConnectorsForType.some((connector) => connector.id === item.connectorId)
+            : false;
+
+          const nextConnectorIdValue = currentConnectorIsAvailable
+            ? item.connectorId
+            : availableConnectorsForType[0]?.id ?? '';
+
           const selectedType = canonicalNextTypeId
             ? connectorTypes.find((type) => type.id === canonicalNextTypeId) ?? null
             : null;
-          const defaultLabel = connectorsForType[0]?.name ?? selectedType?.name ?? getConnectorFallbackLabel(index);
+          const selectedConnector = nextConnectorIdValue
+            ? connectors.find((connector) => connector.id === nextConnectorIdValue) ?? null
+            : null;
+
+          const defaultLabel =
+            selectedConnector?.name ?? selectedType?.name ?? getConnectorFallbackLabel(index);
+
           return {
             ...item,
             connectorTypeId: canonicalNextTypeId,
-            connectorId: connectorsForType[0]?.id ?? '',
+            connectorId: nextConnectorIdValue,
             label: wasLabelAuto ? defaultLabel : item.label,
             isLabelAuto: wasLabelAuto,
           };
@@ -537,17 +592,44 @@ export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFor
             return item;
           }
 
-          const selectedConnectorInstance = connectors.find((connector) => connector.id === nextConnectorId) ?? null;
+          const takenConnectorIds = new Set(
+            prev.connectors
+              .filter((connectorConfig) => connectorConfig.id !== connectorConfigId)
+              .map((connectorConfig) => connectorConfig.connectorId)
+              .filter((id): id is string => Boolean(id))
+          );
+
+          const connectorsForTypeAll = item.connectorTypeId
+            ? connectors.filter((connector) => connector.actionTypeId === item.connectorTypeId)
+            : [];
+
+          const availableConnectorsForType = connectorsForTypeAll.filter(
+            (connector) => !takenConnectorIds.has(connector.id)
+          );
+
+          const requestedConnectorIsAvailable = nextConnectorId
+            ? availableConnectorsForType.some((connector) => connector.id === nextConnectorId)
+            : false;
+
+          const nextConnectorIdValue = requestedConnectorIsAvailable
+            ? nextConnectorId
+            : availableConnectorsForType[0]?.id ?? '';
+
+          const selectedConnectorInstance = nextConnectorIdValue
+            ? connectors.find((connector) => connector.id === nextConnectorIdValue) ?? null
+            : null;
           const selectedType = item.connectorTypeId
             ? connectorTypes.find((type) => type.id === item.connectorTypeId) ?? null
             : null;
           const defaultLabel = selectedConnectorInstance?.name ?? selectedType?.name ?? getConnectorFallbackLabel(index);
 
+          const wasLabelAuto = item.isLabelAuto ?? true;
+
           return {
             ...item,
-            connectorId: nextConnectorId,
-            label: (item.isLabelAuto ?? true) ? defaultLabel : item.label,
-            isLabelAuto: item.isLabelAuto ?? true,
+            connectorId: nextConnectorIdValue,
+            label: wasLabelAuto ? defaultLabel : item.label,
+            isLabelAuto: wasLabelAuto,
           };
         }),
       }));
@@ -1024,6 +1106,17 @@ const ConfigurationPanel = ({
                 ? connectorsByType[connectorConfig.connectorTypeId] ?? []
                 : [];
 
+              const takenConnectorIds = new Set(
+                config.connectors
+                  .filter((item) => item.id !== connectorConfig.id)
+                  .map((item) => item.connectorId)
+                  .filter((id): id is string => Boolean(id))
+              );
+
+              const availableConnectorsForType = connectorsForType.filter(
+                (connector) => connector.id === connectorConfig.connectorId || !takenConnectorIds.has(connector.id)
+              );
+
               const connectorSelectOptions = [
                 {
                   value: '',
@@ -1031,7 +1124,7 @@ const ConfigurationPanel = ({
                     defaultMessage: 'Select a connector',
                   }),
                 },
-                ...toConnectorOptions(connectorsForType),
+                ...toConnectorOptions(availableConnectorsForType),
               ];
 
               const connectorTypeSelectOptions = [
@@ -1065,7 +1158,7 @@ const ConfigurationPanel = ({
               const shouldShowConnectorWarning =
                 !isLoadingConnectors &&
                 !!connectorConfig.connectorTypeId &&
-                connectorsForType.length === 0;
+                availableConnectorsForType.length === 0;
 
               return (
                 <React.Fragment key={connectorConfig.id}>
@@ -1177,7 +1270,7 @@ const ConfigurationPanel = ({
                         >
                           <p>
                             {i18n.translate('customizableForm.builder.noConnectorsWarningBody', {
-                              defaultMessage: 'Create a connector of this type to enable submissions.',
+                              defaultMessage: 'Create a connector of this type or free an existing one to enable submissions.',
                             })}
                           </p>
                         </EuiCallOut>
