@@ -220,6 +220,15 @@ const previewInputPlaceholderStyles = css`
   }
 `;
 
+const connectorSummaryRowBaseStyles = css`
+  padding: 8px 12px;
+  border-radius: 4px;
+`;
+
+const connectorSummaryHeaderTextStyles = css`
+  font-size: 0.95rem;
+`;
+
 export const CustomizableFormBuilder = ({ notifications, http }: CustomizableFormBuilderProps) => {
   const [formConfig, setFormConfig] = useState<FormConfig>(INITIAL_CONFIG);
   const fieldCounter = useRef<number>(INITIAL_CONFIG.fields.length);
@@ -1638,9 +1647,18 @@ const InfoPanel = ({ connectorSummaries, renderedPayloads, templateValidationByC
           </EuiText>
         ) : (
           <>
-            <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false}>
-              <EuiFlexItem grow={1}>
-                <EuiText size="xs" color="subdued">
+            <div
+              css={[
+                connectorSummaryRowBaseStyles,
+                {
+                  backgroundColor: '#ffffff',
+                  marginBottom: connectorSummaries.length > 0 ? 6 : 0,
+                },
+              ]}
+            >
+              <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false}>
+                <EuiFlexItem grow={1}>
+                <EuiText size="xs" color="subdued" css={connectorSummaryHeaderTextStyles}>
                   <strong>
                     {i18n.translate('customizableForm.builder.infoPanel.labelHeader', {
                       defaultMessage: 'Label',
@@ -1649,7 +1667,7 @@ const InfoPanel = ({ connectorSummaries, renderedPayloads, templateValidationByC
                 </EuiText>
               </EuiFlexItem>
               <EuiFlexItem grow={1}>
-                <EuiText size="xs" color="subdued">
+                <EuiText size="xs" color="subdued" css={connectorSummaryHeaderTextStyles}>
                   <strong>
                     {i18n.translate('customizableForm.builder.infoPanel.connectorHeader', {
                       defaultMessage: 'Connector',
@@ -1658,20 +1676,28 @@ const InfoPanel = ({ connectorSummaries, renderedPayloads, templateValidationByC
                 </EuiText>
               </EuiFlexItem>
               <EuiFlexItem grow={1}>
-                <EuiText size="xs" color="subdued">
+                <EuiText size="xs" color="subdued" css={connectorSummaryHeaderTextStyles}>
                   <strong>
                     {i18n.translate('customizableForm.builder.infoPanel.typeHeader', {
                       defaultMessage: 'Type',
                     })}
                   </strong>
-                </EuiText>
-              </EuiFlexItem>
-            </EuiFlexGroup>
-
-            <EuiSpacer size="xs" />
+                  </EuiText>
+                </EuiFlexItem>
+              </EuiFlexGroup>
+            </div>
 
             {connectorSummaries.map(({ config, connector, type, label }, index) => (
-              <React.Fragment key={`connector-summary-${config.id}`}>
+              <div
+                key={`connector-summary-${config.id}`}
+                css={[
+                  connectorSummaryRowBaseStyles,
+                  {
+                    backgroundColor: index % 2 === 0 ? '#ffffff' : '#f7fbff',
+                    marginBottom: index < connectorSummaries.length - 1 ? 6 : 0,
+                  },
+                ]}
+              >
                 <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false}>
                   <EuiFlexItem grow={1}>
                     <EuiText size="s">{label}</EuiText>
@@ -1689,8 +1715,7 @@ const InfoPanel = ({ connectorSummaries, renderedPayloads, templateValidationByC
                     <EuiText size="s">{type?.name ?? connector?.actionTypeId ?? '—'}</EuiText>
                   </EuiFlexItem>
                 </EuiFlexGroup>
-                {index < connectorSummaries.length - 1 ? <EuiSpacer size="s" /> : null}
-              </React.Fragment>
+              </div>
             ))}
           </>
         )}
