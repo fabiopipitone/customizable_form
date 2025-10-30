@@ -6,6 +6,7 @@ export interface SerializedConnectorConfig {
   connectorTypeId: string;
   connectorId: string;
   documentTemplate: string;
+  isLabelAuto: boolean;
 }
 
 export interface SerializedFieldConfig {
@@ -32,6 +33,7 @@ const serializeConnector = (connector: FormConnectorConfig): SerializedConnector
   connectorTypeId: connector.connectorTypeId,
   connectorId: connector.connectorId,
   documentTemplate: connector.documentTemplate,
+  isLabelAuto: connector.isLabelAuto,
 });
 
 const serializeField = (field: FormFieldConfig): SerializedFieldConfig => ({
@@ -54,3 +56,30 @@ export const serializeFormConfig = (config: FormConfig): SerializedFormConfig =>
 
 export const serializeFormConfigToJson = (config: FormConfig): string =>
   JSON.stringify(serializeFormConfig(config));
+
+const deserializeConnector = (connector: SerializedConnectorConfig): FormConnectorConfig => ({
+  id: connector.id,
+  connectorTypeId: connector.connectorTypeId,
+  connectorId: connector.connectorId,
+  label: connector.label,
+  documentTemplate: connector.documentTemplate,
+  isLabelAuto: connector.isLabelAuto ?? false,
+});
+
+const deserializeField = (field: SerializedFieldConfig): FormFieldConfig => ({
+  id: field.id,
+  key: field.key,
+  label: field.label,
+  placeholder: field.placeholder,
+  type: field.type,
+  required: field.required,
+});
+
+export const deserializeFormConfig = (serialized: SerializedFormConfig): FormConfig => ({
+  title: serialized.title,
+  description: serialized.description,
+  showTitle: serialized.showTitle,
+  showDescription: serialized.showDescription,
+  connectors: serialized.connectors.map(deserializeConnector),
+  fields: serialized.fields.map(deserializeField),
+});

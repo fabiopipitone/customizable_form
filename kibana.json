@@ -7,7 +7,7 @@
     "githubTeam": ""
   },
   "description": "Customizable form-like visualization to make dashboards a bit more interactive",
-  "server": false,
+  "server": true,
   "ui": true,
   "requiredPlugins": [
     "navigation",
@@ -16,7 +16,9 @@
     "data",
     "actions",
     "savedObjects",
-    "presentationUtil"
+    "presentationUtil",
+    "embeddable",
+    "contentManagement"
   ],
   "requiredBundles": [
     "triggersActionsUi",

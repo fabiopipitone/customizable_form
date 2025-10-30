@@ -7,7 +7,7 @@ import React, {
   useState,
 } from 'react';
 import { i18n } from '@kbn/i18n';
-import type { CoreStart, NotificationsStart } from '@kbn/core/public';
+import type { AppMountParameters, CoreStart, NotificationsStart } from '@kbn/core/public';
 import { showSaveModal } from '@kbn/saved-objects-plugin/public';
 import type { NavigationPublicPluginStart, TopNavMenuData } from '@kbn/navigation-plugin/public';
 import {
@@ -28,6 +28,7 @@ import {
   EuiForm,
   EuiFormRow,
   EuiIcon,
+  EuiLoadingSpinner,
   EuiPanel,
   EuiSelect,
   EuiSpacer,
@@ -51,15 +52,24 @@ import {
   FormConnectorConfig,
   SupportedConnectorTypeId,
 } from './types';
-import { serializeFormConfigToJson } from './serialization';
 import { PLUGIN_ID } from '../../../common';
+import {
+  createCustomizableForm,
+  updateCustomizableForm,
+  resolveCustomizableForm,
+  getFormConfigFromResolveResponse,
+} from '../../services/persistence';
 
 const SavedObjectSaveModalDashboard = withSuspense(LazySavedObjectSaveModalDashboard);
 
 interface CustomizableFormBuilderProps {
+  mode: 'create' | 'edit';
+  savedObjectId?: string;
   notifications: NotificationsStart;
   http: CoreStart['http'];
+  application: CoreStart['application'];
   navigation: NavigationPublicPluginStart;
+  history: AppMountParameters['history'];
 }
 
 const CONNECTOR_TYPE_CANONICAL: Record<string, SupportedConnectorTypeId> = {
@@ -263,10 +273,25 @@ type ConnectorSelectionStateEntry = {
   hasSelection: boolean;
 };
 
-export const CustomizableFormBuilder = ({ notifications, http, navigation }: CustomizableFormBuilderProps) => {
+export const CustomizableFormBuilder = ({
+  mode,
+  savedObjectId: initialSavedObjectId,
+  notifications,
+  http,
+  application,
+  navigation,
+  history,
+}: CustomizableFormBuilderProps) => {
   const [formConfig, setFormConfig] = useState<FormConfig>(INITIAL_CONFIG);
   const fieldCounter = useRef<number>(INITIAL_CONFIG.fields.length);
   const connectorCounter = useRef<number>(INITIAL_CONFIG.connectors.length);
+
+  const [savedObjectId, setSavedObjectId] = useState<string | null>(
+    mode === 'edit' && initialSavedObjectId ? initialSavedObjectId : null
+  );
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(mode === 'edit');
+  const [initialLoadError, setInitialLoadError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
 
   const [connectorTypes, setConnectorTypes] = useState<
     Array<ActionType & { id: SupportedConnectorTypeId }>
@@ -282,6 +307,74 @@ export const CustomizableFormBuilder = ({ notifications, http, navigation }: Cus
   const [fieldValues, setFieldValues] = useState<Record<string, string>>(() =>
     buildInitialFieldValues(INITIAL_CONFIG.fields)
   );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadConfigForEdit = async (id: string) => {
+      setIsInitialLoading(true);
+      setInitialLoadError(null);
+
+      try {
+        const resolveResult = await resolveCustomizableForm(http, id);
+        if (!isMounted) {
+          return;
+        }
+        const nextConfig = getFormConfigFromResolveResponse(resolveResult);
+        setFormConfig(nextConfig);
+        fieldCounter.current = nextConfig.fields.length;
+        connectorCounter.current = nextConfig.connectors.length;
+        setFieldValues(buildInitialFieldValues(nextConfig.fields));
+        setSavedObjectId(resolveResult.saved_object.id);
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+        const message = getErrorMessage(error);
+        setInitialLoadError(message);
+        toasts.addDanger({
+          title: i18n.translate('customizableForm.builder.loadSavedObjectErrorTitle', {
+            defaultMessage: 'Unable to load form configuration',
+          }),
+          text: message,
+        });
+      } finally {
+        if (isMounted) {
+          setIsInitialLoading(false);
+        }
+      }
+    };
+
+    if (mode === 'edit') {
+      if (initialSavedObjectId) {
+        loadConfigForEdit(initialSavedObjectId);
+      } else {
+        const message = i18n.translate('customizableForm.builder.missingSavedObjectIdMessage', {
+          defaultMessage: 'No saved object id provided.',
+        });
+        setInitialLoadError(message);
+        setIsInitialLoading(false);
+        toasts.addDanger({
+          title: i18n.translate('customizableForm.builder.loadSavedObjectMissingIdTitle', {
+            defaultMessage: 'Unable to load form configuration',
+          }),
+          text: message,
+        });
+      }
+    } else {
+      setSavedObjectId(null);
+      setInitialLoadError(null);
+      setIsInitialLoading(false);
+      setFormConfig(INITIAL_CONFIG);
+      fieldCounter.current = INITIAL_CONFIG.fields.length;
+      connectorCounter.current = INITIAL_CONFIG.connectors.length;
+      setFieldValues(buildInitialFieldValues(INITIAL_CONFIG.fields));
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [http, mode, initialSavedObjectId, toasts]);
 
   // Load connector types
   useEffect(() => {
@@ -896,38 +989,90 @@ export const CustomizableFormBuilder = ({ notifications, http, navigation }: Cus
   );
 
   const handleSaveVisualizationRequest = useCallback(() => {
-    const serializedState = serializeFormConfigToJson(formConfig);
-
     const handleModalSave: SaveModalDashboardProps['onSave'] = async ({
       newTitle,
       newDescription,
+      newCopyOnSave,
       dashboardId,
       addToLibrary,
     }) => {
-      // Placeholder: wire up persistence + dashboard redirect in a later step.
-      // eslint-disable-next-line no-console
-      console.log('Customizable Form save payload', {
+      const updatedConfig: FormConfig = {
+        ...formConfig,
         title: newTitle,
         description: newDescription,
-        addToLibrary,
-        dashboardId,
-        state: serializedState,
-      });
+      };
 
-      toasts.addInfo({
-        title: i18n.translate('customizableForm.builder.saveVisualizationPlaceholderTitle', {
-          defaultMessage: 'Save not yet implemented',
-        }),
-        text: i18n.translate('customizableForm.builder.saveVisualizationPlaceholderBody', {
-          defaultMessage: 'Serialized configuration logged to the browser console.',
-        }),
-      });
+      setFormConfig(updatedConfig);
+
+      const shouldCreateNew = newCopyOnSave || !savedObjectId;
+
+      setIsSaving(true);
+
+      try {
+        const savedObject = shouldCreateNew
+          ? await createCustomizableForm(http, updatedConfig)
+          : await updateCustomizableForm(http, savedObjectId!, updatedConfig);
+
+        setSavedObjectId(savedObject.id);
+
+        if (shouldCreateNew) {
+          history.replace(`/edit/${savedObject.id}`);
+          toasts.addSuccess({
+            title: i18n.translate('customizableForm.builder.saveVisualizationSuccessTitleNew', {
+              defaultMessage: 'Form saved to the library',
+            }),
+            text: i18n.translate('customizableForm.builder.saveVisualizationSuccessBodyNew', {
+              defaultMessage: 'Your new customizable form is ready to use.',
+            }),
+          });
+        } else {
+          toasts.addSuccess({
+            title: i18n.translate('customizableForm.builder.saveVisualizationSuccessTitleUpdate', {
+              defaultMessage: 'Changes saved',
+            }),
+            text: i18n.translate('customizableForm.builder.saveVisualizationSuccessBodyUpdate', {
+              defaultMessage: 'The customizable form has been updated.',
+            }),
+          });
+        }
+
+        if (dashboardId && !addToLibrary) {
+          toasts.addWarning({
+            title: i18n.translate('customizableForm.builder.saveVisualizationByValueNotSupportedTitle', {
+              defaultMessage: 'Added to dashboard as library item',
+            }),
+            text: i18n.translate('customizableForm.builder.saveVisualizationByValueNotSupportedBody', {
+              defaultMessage:
+                'By-value panels are not yet supported. The saved form will be available from the library.',
+            }),
+          });
+        }
+
+        if (dashboardId) {
+          application.navigateToApp('dashboards', {
+            path: dashboardId === 'new' ? '#/create' : `#/view/${dashboardId}`,
+          });
+        }
+
+        return;
+      } catch (error) {
+        const message = getErrorMessage(error);
+        toasts.addDanger({
+          title: i18n.translate('customizableForm.builder.saveVisualizationErrorTitle', {
+            defaultMessage: 'Unable to save form',
+          }),
+          text: message,
+        });
+        throw new Error(message);
+      } finally {
+        setIsSaving(false);
+      }
     };
 
     showSaveModal(
       <SavedObjectSaveModalDashboard
         documentInfo={{
-          id: undefined,
+          id: savedObjectId ?? undefined,
           title: formConfig.title,
           description: formConfig.description,
         }}
@@ -939,7 +1084,7 @@ export const CustomizableFormBuilder = ({ notifications, http, navigation }: Cus
         onClose={() => {}}
       />
     );
-  }, [formConfig, toasts]);
+  }, [application, formConfig, history, http, savedObjectId, toasts]);
 
   const isSaveDisabled = useMemo(
     () =>
@@ -965,11 +1110,11 @@ export const CustomizableFormBuilder = ({ notifications, http, navigation }: Cus
           defaultMessage: 'Save',
         }),
         run: handleSaveVisualizationRequest,
-        disableButton: isSaveDisabled,
+        disableButton: isSaveDisabled || isSaving,
         testId: 'customizableFormSaveButton',
       },
     ],
-    [handleSaveVisualizationRequest, isSaveDisabled]
+    [handleSaveVisualizationRequest, isSaveDisabled, isSaving]
   );
 
   const connectorSummaries = useMemo(
@@ -1001,6 +1146,53 @@ export const CustomizableFormBuilder = ({ notifications, http, navigation }: Cus
       }, {}),
     });
   }, [formConfig.connectors, formConfig.fields, fieldValues, renderedPayloads]);
+
+  if (isInitialLoading) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '60vh',
+        }}
+      >
+        <EuiLoadingSpinner size="xl" />
+      </div>
+    );
+  }
+
+  if (initialLoadError) {
+    return (
+      <div
+        style={{
+          padding: '32px',
+          maxWidth: 600,
+          margin: '0 auto',
+        }}
+      >
+        <EuiCallOut
+          color="danger"
+          iconType="alert"
+          title={i18n.translate('customizableForm.builder.initialLoadErrorTitle', {
+            defaultMessage: 'Unable to load form',
+          })}
+        >
+          <p>{initialLoadError}</p>
+        </EuiCallOut>
+        <EuiSpacer size="m" />
+        <EuiButton
+          onClick={() => history.push('/create')}
+          iconType="editorRedo"
+          fill
+        >
+          {i18n.translate('customizableForm.builder.initialLoadErrorResetButton', {
+            defaultMessage: 'Start a new form',
+          })}
+        </EuiButton>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -1068,6 +1260,7 @@ export const CustomizableFormBuilder = ({ notifications, http, navigation }: Cus
             connectorsError={connectorsError}
             hasEmptyConnectorLabels={hasEmptyConnectorLabels}
             isSaveDisabled={isSaveDisabled}
+            isSaving={isSaving}
             onSaveRequest={handleSaveVisualizationRequest}
           />
         </EuiFlexItem>
@@ -1104,6 +1297,7 @@ interface ConfigurationPanelProps {
   connectorsError: string | null;
   hasEmptyConnectorLabels: boolean;
   isSaveDisabled: boolean;
+  isSaving: boolean;
 }
 
 type ConfigurationTab = 'general' | 'connectors' | 'fields' | 'payload';
@@ -1136,6 +1330,7 @@ const ConfigurationPanel = ({
   connectorsError,
   hasEmptyConnectorLabels,
   isSaveDisabled,
+  isSaving,
 }: ConfigurationPanelProps) => {
   const [activeTab, setActiveTab] = useState<ConfigurationTab>('general');
 
@@ -1775,11 +1970,17 @@ const ConfigurationPanel = ({
 
       <EuiFlexGroup justifyContent="flexEnd">
         <EuiFlexItem grow={false}>
-            <EuiButton fill iconType="save" onClick={onSaveRequest} disabled={isSaveDisabled}>
-              {i18n.translate('customizableForm.builder.saveVisualizationButton', {
-                defaultMessage: 'Save Visualization',
-              })}
-            </EuiButton>
+          <EuiButton
+            fill
+            iconType="save"
+            onClick={onSaveRequest}
+            disabled={isSaveDisabled || isSaving}
+            isLoading={isSaving}
+          >
+            {i18n.translate('customizableForm.builder.saveVisualizationButton', {
+              defaultMessage: 'Save Visualization',
+            })}
+          </EuiButton>
         </EuiFlexItem>
       </EuiFlexGroup>
     </EuiPanel>

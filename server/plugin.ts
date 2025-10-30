@@ -8,6 +8,7 @@ import type {
 
 import type { CustomizableFormPluginSetup, CustomizableFormPluginStart } from './types';
 import { defineRoutes } from './routes';
+import { registerCustomizableFormSavedObjectType } from './saved_objects';
 
 export class CustomizableFormPlugin
   implements Plugin<CustomizableFormPluginSetup, CustomizableFormPluginStart>
@@ -20,6 +21,9 @@ export class CustomizableFormPlugin
 
   public setup(core: CoreSetup) {
     this.logger.debug('customizableForm: Setup');
+
+    registerCustomizableFormSavedObjectType(core.savedObjects);
+
     const router = core.http.createRouter();
 
     // Register server side APIs

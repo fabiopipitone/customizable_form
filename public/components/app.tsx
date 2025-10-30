@@ -1,29 +1,57 @@
 import React from 'react';
 import { I18nProvider } from '@kbn/i18n-react';
-import { BrowserRouter as Router } from '@kbn/shared-ux-router';
-import type { CoreStart } from '@kbn/core/public';
+import { Router, Routes, Route } from '@kbn/shared-ux-router';
+import { Redirect } from 'react-router-dom';
+import type { AppMountParameters, CoreStart } from '@kbn/core/public';
 import type { NavigationPublicPluginStart } from '@kbn/navigation-plugin/public';
 import CustomizableFormBuilder from './form_builder/form_builder';
 
 interface CustomizableFormAppDeps {
-  basename: string;
   notifications: CoreStart['notifications'];
   http: CoreStart['http'];
+  application: CoreStart['application'];
   navigation: NavigationPublicPluginStart;
+  history: AppMountParameters['history'];
 }
 
-export const CustomizableFormApp = ({ basename, notifications, http, navigation }: CustomizableFormAppDeps) => {
-  return (
-    <Router basename={basename}>
-      <I18nProvider>
-        <>
+export const CustomizableFormApp = ({
+  notifications,
+  http,
+  application,
+  navigation,
+  history,
+}: CustomizableFormAppDeps) => (
+  <Router history={history}>
+    <I18nProvider>
+      <Routes>
+        <Route exact path="/create">
           <CustomizableFormBuilder
+            mode="create"
             notifications={notifications}
             http={http}
+            application={application}
             navigation={navigation}
+            history={history}
           />
-        </>
-      </I18nProvider>
-    </Router>
-  );
-};
+        </Route>
+        <Route
+          path="/edit/:id"
+          render={({ match }) => (
+            <CustomizableFormBuilder
+              mode="edit"
+              savedObjectId={match.params.id}
+              notifications={notifications}
+              http={http}
+              application={application}
+              navigation={navigation}
+              history={history}
+            />
+          )}
+        />
+        <Route path="*">
+          <Redirect to="/create" />
+        </Route>
+      </Routes>
+    </I18nProvider>
+  </Router>
+);

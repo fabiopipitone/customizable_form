@@ -5,15 +5,16 @@ import type { AppPluginStartDependencies } from './types';
 import { CustomizableFormApp } from './components/app';
 
 export const renderApp = (
-  { notifications, http }: CoreStart,
+  { notifications, http, application }: CoreStart,
   { navigation }: AppPluginStartDependencies,
-  { appBasePath, element }: AppMountParameters
+  { element, history }: AppMountParameters
 ) => {
   ReactDOM.render(
     <CustomizableFormApp
-      basename={appBasePath}
       notifications={notifications}
       http={http}
+      application={application}
+      history={history}
       navigation={navigation}
     />,
     element
