@@ -3,7 +3,7 @@ import type { FormConfig, FormConnectorConfig, FormFieldConfig } from './types';
 export interface SerializedConnectorConfig {
   id: string;
   label: string;
-  connectorTypeId: string;
+  connectorTypeId: FormConnectorConfig['connectorTypeId'];
   connectorId: string;
   documentTemplate: string;
   isLabelAuto: boolean;

@@ -1,8 +1,4 @@
-import type {
-  HttpStart,
-  SavedObject,
-  SavedObjectsResolveResponse,
-} from '@kbn/core/public';
+import type { HttpStart, SavedObject } from '@kbn/core/public';
 import {
   CUSTOMIZABLE_FORM_SAVED_OBJECT_TYPE,
   type CustomizableFormSavedObjectAttributes,
@@ -18,8 +14,12 @@ export type CustomizableFormSavedObject = SavedObject<
   CustomizableFormSavedObjectAttributes<SerializedFormConfig>
 >;
 
-export type CustomizableFormResolveResponse =
-  SavedObjectsResolveResponse<CustomizableFormSavedObjectAttributes<SerializedFormConfig>>;
+export interface CustomizableFormResolveResponse {
+  saved_object: CustomizableFormSavedObject;
+  outcome: 'exactMatch' | 'aliasMatch' | 'conflict';
+  alias_target_id?: string;
+  alias_purpose?: 'savedObjectConversion' | 'savedObjectImport';
+}
 
 const API_BASE_PATH = '/api/customizable_form/forms';
 

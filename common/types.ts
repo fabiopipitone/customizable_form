@@ -1,4 +1,5 @@
-export interface CustomizableFormSavedObjectAttributes<TFormConfig = unknown> {
+export interface CustomizableFormSavedObjectAttributes<TFormConfig = unknown>
+  extends Record<string, unknown> {
   title: string;
   description: string;
   showTitle: boolean;

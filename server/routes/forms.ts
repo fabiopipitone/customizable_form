@@ -111,6 +111,11 @@ const buildErrorResponsePayload = (error: unknown, fallbackMessage: string) => {
   };
 };
 
+const ROUTE_SECURITY = {
+  authz: { enabled: false as const, reason: 'Relies on saved object authorization' },
+  authc: { enabled: true as const },
+};
+
 export const registerFormRoutes = (router: IRouter) => {
   router.get(
     {
@@ -118,9 +123,11 @@ export const registerFormRoutes = (router: IRouter) => {
       validate: {
         query: findQuerySchema,
       },
+      security: ROUTE_SECURITY,
     },
     async (context, request, response) => {
-      const soClient = context.core.savedObjects.client;
+      const { savedObjects } = await context.core;
+      const soClient = savedObjects.client;
       const { search, perPage, page, fields } = request.query;
 
       try {
@@ -154,9 +161,11 @@ export const registerFormRoutes = (router: IRouter) => {
       validate: {
         body: saveBodySchema,
       },
+      security: ROUTE_SECURITY,
     },
     async (context, request, response) => {
-      const soClient = context.core.savedObjects.client;
+      const { savedObjects } = await context.core;
+      const soClient = savedObjects.client;
       const { formConfig } = request.body;
 
       try {
@@ -189,9 +198,11 @@ export const registerFormRoutes = (router: IRouter) => {
         params: withIdParamsSchema,
         body: saveBodySchema,
       },
+      security: ROUTE_SECURITY,
     },
     async (context, request, response) => {
-      const soClient = context.core.savedObjects.client;
+      const { savedObjects } = await context.core;
+      const soClient = savedObjects.client;
       const { formConfig } = request.body;
       const { id } = request.params;
 
@@ -226,9 +237,11 @@ export const registerFormRoutes = (router: IRouter) => {
       validate: {
         params: withIdParamsSchema,
       },
+      security: ROUTE_SECURITY,
     },
     async (context, request, response) => {
-      const soClient = context.core.savedObjects.client;
+      const { savedObjects } = await context.core;
+      const soClient = savedObjects.client;
       const { id } = request.params;
 
       try {
@@ -251,9 +264,11 @@ export const registerFormRoutes = (router: IRouter) => {
       validate: {
         params: withIdParamsSchema,
       },
+      security: ROUTE_SECURITY,
     },
     async (context, request, response) => {
-      const soClient = context.core.savedObjects.client;
+      const { savedObjects } = await context.core;
+      const soClient = savedObjects.client;
       const { id } = request.params;
 
       try {
@@ -277,9 +292,11 @@ export const registerFormRoutes = (router: IRouter) => {
       validate: {
         params: withIdParamsSchema,
       },
+      security: ROUTE_SECURITY,
     },
     async (context, request, response) => {
-      const soClient = context.core.savedObjects.client;
+      const { savedObjects } = await context.core;
+      const soClient = savedObjects.client;
       const { id } = request.params;
 
       try {
