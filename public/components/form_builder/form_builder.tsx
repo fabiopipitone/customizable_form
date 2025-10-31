@@ -57,7 +57,8 @@ import {
   createCustomizableForm,
   updateCustomizableForm,
   resolveCustomizableForm,
-  getFormConfigFromResolveResponse,
+  getDocumentFromResolveResponse,
+  type CustomizableFormAttributesMeta,
 } from '../../services/persistence';
 
 const SavedObjectSaveModalDashboard = withSuspense(LazySavedObjectSaveModalDashboard);
@@ -161,6 +162,11 @@ const INITIAL_CONFIG: FormConfig = {
       required: true,
     },
   ],
+};
+
+const INITIAL_SAVED_OBJECT_ATTRIBUTES: CustomizableFormAttributesMeta = {
+  title: '',
+  description: '',
 };
 
 const buildInitialFieldValues = (fields: FormFieldConfig[]): Record<string, string> =>
@@ -283,6 +289,9 @@ export const CustomizableFormBuilder = ({
   history,
 }: CustomizableFormBuilderProps) => {
   const [formConfig, setFormConfig] = useState<FormConfig>(INITIAL_CONFIG);
+  const [savedObjectAttributes, setSavedObjectAttributes] = useState<CustomizableFormAttributesMeta>(
+    () => ({ ...INITIAL_SAVED_OBJECT_ATTRIBUTES })
+  );
   const fieldCounter = useRef<number>(INITIAL_CONFIG.fields.length);
   const connectorCounter = useRef<number>(INITIAL_CONFIG.connectors.length);
 
@@ -320,8 +329,14 @@ export const CustomizableFormBuilder = ({
         if (!isMounted) {
           return;
         }
-        const nextConfig = getFormConfigFromResolveResponse(resolveResult);
+        const document = getDocumentFromResolveResponse(resolveResult);
+        const nextConfig = document.formConfig;
         setFormConfig(nextConfig);
+        setSavedObjectAttributes({
+          title: document.attributes.title || nextConfig.title,
+          description:
+            document.attributes.description ?? nextConfig.description,
+        });
         fieldCounter.current = nextConfig.fields.length;
         connectorCounter.current = nextConfig.connectors.length;
         setFieldValues(buildInitialFieldValues(nextConfig.fields));
@@ -366,6 +381,7 @@ export const CustomizableFormBuilder = ({
       setInitialLoadError(null);
       setIsInitialLoading(false);
       setFormConfig(INITIAL_CONFIG);
+      setSavedObjectAttributes({ ...INITIAL_SAVED_OBJECT_ATTRIBUTES });
       fieldCounter.current = INITIAL_CONFIG.fields.length;
       connectorCounter.current = INITIAL_CONFIG.connectors.length;
       setFieldValues(buildInitialFieldValues(INITIAL_CONFIG.fields));
@@ -996,13 +1012,14 @@ export const CustomizableFormBuilder = ({
       dashboardId,
       addToLibrary,
     }) => {
-      const updatedConfig: FormConfig = {
-        ...formConfig,
-        title: newTitle,
-        description: newDescription,
+      const titleInput = typeof newTitle === 'string' ? newTitle.trim() : '';
+      const descriptionInput = typeof newDescription === 'string' ? newDescription.trim() : '';
+      const attributes: CustomizableFormAttributesMeta = {
+        title:
+          titleInput ||
+          (savedObjectAttributes.title?.trim().length ? savedObjectAttributes.title : formConfig.title),
+        description: descriptionInput,
       };
-
-      setFormConfig(updatedConfig);
 
       const shouldCreateNew = newCopyOnSave || !savedObjectId;
 
@@ -1010,10 +1027,11 @@ export const CustomizableFormBuilder = ({
 
       try {
         const savedObject = shouldCreateNew
-          ? await createCustomizableForm(http, updatedConfig)
-          : await updateCustomizableForm(http, savedObjectId!, updatedConfig);
+          ? await createCustomizableForm(http, { formConfig, attributes })
+          : await updateCustomizableForm(http, savedObjectId!, { formConfig, attributes });
 
         setSavedObjectId(savedObject.id);
+        setSavedObjectAttributes(attributes);
 
         if (shouldCreateNew) {
           history.replace(`/edit/${savedObject.id}`);
@@ -1073,8 +1091,18 @@ export const CustomizableFormBuilder = ({
       <SavedObjectSaveModalDashboard
         documentInfo={{
           id: savedObjectId ?? undefined,
-          title: formConfig.title,
-          description: formConfig.description,
+          title:
+            savedObjectId !== null
+              ? savedObjectAttributes.title
+              : savedObjectAttributes.title?.trim().length > 0
+              ? savedObjectAttributes.title
+              : formConfig.title,
+          description:
+            savedObjectId !== null
+              ? savedObjectAttributes.description
+              : savedObjectAttributes.description?.trim().length
+              ? savedObjectAttributes.description
+              : formConfig.description,
         }}
         canSaveByReference={true}
         objectType={i18n.translate('customizableForm.builder.saveModal.objectType', {
@@ -1084,7 +1112,7 @@ export const CustomizableFormBuilder = ({
         onClose={() => {}}
       />
     );
-  }, [application, formConfig, history, http, savedObjectId, toasts]);
+  }, [application, formConfig, history, http, savedObjectAttributes, savedObjectId, toasts]);
 
   const isSaveDisabled = useMemo(
     () =>

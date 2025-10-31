@@ -14,6 +14,16 @@ export type CustomizableFormSavedObject = SavedObject<
   CustomizableFormSavedObjectAttributes<SerializedFormConfig>
 >;
 
+export interface CustomizableFormAttributesMeta {
+  title: string;
+  description: string;
+}
+
+export interface CustomizableFormDocument {
+  formConfig: FormConfig;
+  attributes: CustomizableFormAttributesMeta;
+}
+
 export interface CustomizableFormResolveResponse {
   saved_object: CustomizableFormSavedObject;
   outcome: 'exactMatch' | 'aliasMatch' | 'conflict';
@@ -23,19 +33,27 @@ export interface CustomizableFormResolveResponse {
 
 const API_BASE_PATH = '/api/customizable_form/forms';
 
-const buildBody = (formConfig: FormConfig) => {
+const buildBody = (
+  formConfig: FormConfig,
+  attributes: CustomizableFormAttributesMeta
+) => {
   const serialized = serializeFormConfig(formConfig);
-  return JSON.stringify({ formConfig: serialized });
+  return JSON.stringify({ formConfig: serialized, attributes });
 };
+
+export interface CustomizableFormSaveParams {
+  formConfig: FormConfig;
+  attributes: CustomizableFormAttributesMeta;
+}
 
 export const createCustomizableForm = async (
   http: HttpStart,
-  formConfig: FormConfig
+  { formConfig, attributes }: CustomizableFormSaveParams
 ): Promise<CustomizableFormSavedObject> => {
   const response = await http.post<{ savedObject: CustomizableFormSavedObject }>(
     API_BASE_PATH,
     {
-      body: buildBody(formConfig),
+      body: buildBody(formConfig, attributes),
     }
   );
 
@@ -45,12 +63,12 @@ export const createCustomizableForm = async (
 export const updateCustomizableForm = async (
   http: HttpStart,
   id: string,
-  formConfig: FormConfig
+  { formConfig, attributes }: CustomizableFormSaveParams
 ): Promise<CustomizableFormSavedObject> => {
   const response = await http.put<{ savedObject: CustomizableFormSavedObject }>(
     `${API_BASE_PATH}/${encodeURIComponent(id)}`,
     {
-      body: buildBody(formConfig),
+      body: buildBody(formConfig, attributes),
     }
   );
 
@@ -107,19 +125,40 @@ export const searchCustomizableForms = async (
   return http.get<CustomizableFormSearchResult>(path);
 };
 
-export const getFormConfigFromSavedObject = (savedObject: CustomizableFormSavedObject): FormConfig =>
-  deserializeFormConfig(savedObject.attributes.formConfig);
+export const getFormConfigFromSavedObject = (
+  savedObject: CustomizableFormSavedObject
+): FormConfig => getDocumentFromSavedObject(savedObject).formConfig;
 
 export const getFormConfigFromResolveResponse = (
   resolveResponse: CustomizableFormResolveResponse
-): FormConfig => deserializeFormConfig(resolveResponse.saved_object.attributes.formConfig);
+): FormConfig => getDocumentFromResolveResponse(resolveResponse).formConfig;
 
-export const createEmptySavedObject = (formConfig: FormConfig): CustomizableFormSavedObject => ({
+export const getDocumentFromSavedObject = (
+  savedObject: CustomizableFormSavedObject
+): CustomizableFormDocument => ({
+  formConfig: deserializeFormConfig(savedObject.attributes.formConfig),
+  attributes: {
+    title: typeof savedObject.attributes.title === 'string' ? savedObject.attributes.title : '',
+    description:
+      typeof savedObject.attributes.description === 'string'
+        ? savedObject.attributes.description
+        : '',
+  },
+});
+
+export const getDocumentFromResolveResponse = (
+  resolveResponse: CustomizableFormResolveResponse
+): CustomizableFormDocument => getDocumentFromSavedObject(resolveResponse.saved_object);
+
+export const createEmptySavedObject = (
+  formConfig: FormConfig,
+  attributes: Partial<CustomizableFormAttributesMeta> = {}
+): CustomizableFormSavedObject => ({
   id: '',
   type: CUSTOMIZABLE_FORM_SAVED_OBJECT_TYPE,
   attributes: {
-    title: formConfig.title,
-    description: formConfig.description,
+    title: attributes.title ?? formConfig.title,
+    description: attributes.description ?? formConfig.description,
     showTitle: formConfig.showTitle,
     showDescription: formConfig.showDescription,
     formConfig: serializeFormConfig(formConfig),

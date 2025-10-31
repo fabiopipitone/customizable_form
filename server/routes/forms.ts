@@ -4,8 +4,17 @@ import { CUSTOMIZABLE_FORM_SAVED_OBJECT_TYPE } from '../../common';
 
 const formConfigSchema = schema.object({}, { unknowns: 'allow' });
 
+const saveAttributesSchema = schema.object(
+  {
+    title: schema.maybe(schema.string()),
+    description: schema.maybe(schema.string()),
+  },
+  { unknowns: 'forbid' }
+);
+
 const saveBodySchema = schema.object({
   formConfig: formConfigSchema,
+  attributes: schema.maybe(saveAttributesSchema),
 });
 
 const withIdParamsSchema = schema.object({
@@ -59,12 +68,24 @@ const extractConnectorReferences = (formConfig: unknown): SavedObjectReference[]
     .filter((ref): ref is SavedObjectReference => ref !== null);
 };
 
-const toSavedObjectAttributes = (formConfig: any) => {
-  const title =
+const toSavedObjectAttributes = (
+  formConfig: any,
+  attributes?: { title?: string | null; description?: string | null }
+) => {
+  const titleFromAttributes =
+    typeof attributes?.title === 'string' && attributes.title.trim().length > 0
+      ? attributes.title
+      : null;
+  const titleFromFormConfig =
     typeof formConfig?.title === 'string' && formConfig.title.trim().length > 0
       ? formConfig.title
-      : 'Untitled form';
-  const description = typeof formConfig?.description === 'string' ? formConfig.description : '';
+      : null;
+  const title = titleFromAttributes ?? titleFromFormConfig ?? 'Untitled form';
+
+  const descriptionFromAttributes =
+    typeof attributes?.description === 'string' ? attributes.description : null;
+  const description =
+    descriptionFromAttributes ?? (typeof formConfig?.description === 'string' ? formConfig.description : '');
   const showTitle =
     typeof formConfig?.showTitle === 'boolean' ? formConfig.showTitle : formConfig?.showTitle !== false;
   const showDescription =
@@ -166,12 +187,12 @@ export const registerFormRoutes = (router: IRouter) => {
     async (context, request, response) => {
       const { savedObjects } = await context.core;
       const soClient = savedObjects.client;
-      const { formConfig } = request.body;
+      const { formConfig, attributes } = request.body;
 
       try {
         const savedObject = await soClient.create(
           CUSTOMIZABLE_FORM_SAVED_OBJECT_TYPE,
-          toSavedObjectAttributes(formConfig),
+          toSavedObjectAttributes(formConfig, attributes ?? undefined),
           {
             references: extractConnectorReferences(formConfig),
           }
@@ -203,14 +224,14 @@ export const registerFormRoutes = (router: IRouter) => {
     async (context, request, response) => {
       const { savedObjects } = await context.core;
       const soClient = savedObjects.client;
-      const { formConfig } = request.body;
+      const { formConfig, attributes } = request.body;
       const { id } = request.params;
 
       try {
         const savedObject = await soClient.update(
           CUSTOMIZABLE_FORM_SAVED_OBJECT_TYPE,
           id,
-          toSavedObjectAttributes(formConfig),
+          toSavedObjectAttributes(formConfig, attributes ?? undefined),
           {
             references: extractConnectorReferences(formConfig),
           }
