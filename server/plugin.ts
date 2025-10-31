@@ -42,6 +42,13 @@ export class CustomizableFormPlugin
   ) {
     this.logger.debug('customizableForm: Setup');
 
+    core.capabilities.registerProvider(() => ({
+      customizableForm: {
+        show: true,
+        save: true,
+      },
+    }));
+
     registerCustomizableFormSavedObjectType(core.savedObjects);
 
     contentManagement.register({

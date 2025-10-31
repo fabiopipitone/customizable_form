@@ -14,8 +14,10 @@ export const registerCustomizableFormSavedObjectType = (
       getTitle: (savedObject) => savedObject.attributes.title,
       getInAppUrl: ({ id }) => ({
         path: `${PLUGIN_ROUTE}#/edit/${encodeURIComponent(id)}`,
-        uiCapabilitiesPath: 'visualize.show',
+        uiCapabilitiesPath: 'customizableForm.show',
       }),
+      defaultSearchField: 'title',
+      icon: 'controlsHorizontal',
     },
     mappings: {
       dynamic: false,
