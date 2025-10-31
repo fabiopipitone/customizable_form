@@ -3,14 +3,12 @@ import { I18nProvider } from '@kbn/i18n-react';
 import { Router, Routes, Route } from '@kbn/shared-ux-router';
 import { Redirect } from 'react-router-dom';
 import type { AppMountParameters, CoreStart } from '@kbn/core/public';
-import type { NavigationPublicPluginStart } from '@kbn/navigation-plugin/public';
 import CustomizableFormBuilder from './form_builder/form_builder';
 
 interface CustomizableFormAppDeps {
   notifications: CoreStart['notifications'];
   http: CoreStart['http'];
   application: CoreStart['application'];
-  navigation: NavigationPublicPluginStart;
   history: AppMountParameters['history'];
 }
 
@@ -18,7 +16,6 @@ export const CustomizableFormApp = ({
   notifications,
   http,
   application,
-  navigation,
   history,
 }: CustomizableFormAppDeps) => (
   <Router history={history}>
@@ -30,7 +27,6 @@ export const CustomizableFormApp = ({
             notifications={notifications}
             http={http}
             application={application}
-            navigation={navigation}
             history={history}
           />
         </Route>
@@ -43,7 +39,6 @@ export const CustomizableFormApp = ({
               notifications={notifications}
               http={http}
               application={application}
-              navigation={navigation}
               history={history}
             />
           )}

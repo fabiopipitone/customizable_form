@@ -6,7 +6,7 @@ import { CustomizableFormApp } from './components/app';
 
 export const renderApp = (
   { notifications, http, application }: CoreStart,
-  { navigation }: AppPluginStartDependencies,
+  _deps: AppPluginStartDependencies,
   { element, history }: AppMountParameters
 ) => {
   ReactDOM.render(
@@ -15,7 +15,6 @@ export const renderApp = (
       http={http}
       application={application}
       history={history}
-      navigation={navigation}
     />,
     element
   );

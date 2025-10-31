@@ -50,7 +50,7 @@ export const customizableFormVisTypeAlias: VisTypeAlias = {
           }),
           editor: {
             editApp: PLUGIN_ID,
-            editUrl: `${PLUGIN_ROUTE}#/edit/${encodeURIComponent(id)}`,
+            editUrl: `/edit/${encodeURIComponent(id)}`,
           },
         };
       },

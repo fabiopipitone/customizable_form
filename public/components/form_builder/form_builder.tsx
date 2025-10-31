@@ -9,7 +9,6 @@ import React, {
 import { i18n } from '@kbn/i18n';
 import type { AppMountParameters, CoreStart, NotificationsStart } from '@kbn/core/public';
 import { showSaveModal } from '@kbn/saved-objects-plugin/public';
-import type { NavigationPublicPluginStart, TopNavMenuData } from '@kbn/navigation-plugin/public';
 import {
   LazySavedObjectSaveModalDashboard,
   type SaveModalDashboardProps,
@@ -52,7 +51,6 @@ import {
   FormConnectorConfig,
   SupportedConnectorTypeId,
 } from './types';
-import { PLUGIN_ID } from '../../../common';
 import {
   createCustomizableForm,
   updateCustomizableForm,
@@ -69,7 +67,6 @@ interface CustomizableFormBuilderProps {
   notifications: NotificationsStart;
   http: CoreStart['http'];
   application: CoreStart['application'];
-  navigation: NavigationPublicPluginStart;
   history: AppMountParameters['history'];
 }
 
@@ -285,7 +282,6 @@ export const CustomizableFormBuilder = ({
   notifications,
   http,
   application,
-  navigation,
   history,
 }: CustomizableFormBuilderProps) => {
   const [formConfig, setFormConfig] = useState<FormConfig>(INITIAL_CONFIG);
@@ -1022,6 +1018,7 @@ export const CustomizableFormBuilder = ({
       };
 
       const shouldCreateNew = newCopyOnSave || !savedObjectId;
+      const shouldNavigateToDashboard = Boolean(dashboardId);
 
       setIsSaving(true);
 
@@ -1066,11 +1063,15 @@ export const CustomizableFormBuilder = ({
           });
         }
 
-        if (dashboardId) {
+        if (shouldNavigateToDashboard) {
           application.navigateToApp('dashboards', {
             path: dashboardId === 'new' ? '#/create' : `#/view/${dashboardId}`,
           });
+
+          return;
         }
+
+        window.setTimeout(() => window.location.reload(), 0);
 
         return;
       } catch (error) {
@@ -1128,21 +1129,6 @@ export const CustomizableFormBuilder = ({
       hasEmptyConnectorLabels,
       hasInvalidConnectorSelections,
     ]
-  );
-
-  const topNavConfig = useMemo<TopNavMenuData[]>(
-    () => [
-      {
-        id: 'customizableFormSave',
-        label: i18n.translate('customizableForm.builder.topNav.saveLabel', {
-          defaultMessage: 'Save',
-        }),
-        run: handleSaveVisualizationRequest,
-        disableButton: isSaveDisabled || isSaving,
-        testId: 'customizableFormSaveButton',
-      },
-    ],
-    [handleSaveVisualizationRequest, isSaveDisabled, isSaving]
   );
 
   const connectorSummaries = useMemo(
@@ -1231,13 +1217,6 @@ export const CustomizableFormBuilder = ({
         boxSizing: 'border-box',
       }}
     >
-      <navigation.ui.TopNavMenu
-        appName={PLUGIN_ID}
-        showSearchBar={false}
-        useDefaultBehaviors={true}
-        config={topNavConfig}
-      />
-
       <EuiFlexGroup gutterSize="m" alignItems="stretch">
         <EuiFlexItem grow={4}>
           <EuiFlexGroup direction="column" gutterSize="m">

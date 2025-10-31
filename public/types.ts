@@ -1,5 +1,4 @@
 import type { ContentManagementPublicSetup } from '@kbn/content-management-plugin/public';
-import type { NavigationPublicPluginStart } from '@kbn/navigation-plugin/public';
 import type { VisualizationsSetup } from '@kbn/visualizations-plugin/public';
 
 export interface CustomizableFormPluginSetup {
@@ -13,6 +12,4 @@ export interface CustomizableFormPluginSetupDependencies {
   contentManagement: ContentManagementPublicSetup;
 }
 
-export interface AppPluginStartDependencies {
-  navigation: NavigationPublicPluginStart;
-}
+export interface AppPluginStartDependencies {}
