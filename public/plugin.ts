@@ -12,6 +12,10 @@ import type {
   CustomizableFormPluginSetupDependencies,
 } from './types';
 import { PLUGIN_ID, PLUGIN_NAME, PLUGIN_ROUTE } from '../common';
+import {
+  CUSTOMIZABLE_FORM_CONTENT_ID,
+  CUSTOMIZABLE_FORM_CONTENT_VERSION,
+} from '../common/content_management';
 import { customizableFormVisTypeAlias } from './vis_type_alias';
 
 export class CustomizableFormPlugin
@@ -19,7 +23,7 @@ export class CustomizableFormPlugin
 {
   public setup(
     core: CoreSetup<AppPluginStartDependencies>,
-    { visualizations }: CustomizableFormPluginSetupDependencies
+    { visualizations, contentManagement }: CustomizableFormPluginSetupDependencies
   ): CustomizableFormPluginSetup {
     core.application.register({
       id: PLUGIN_ID,
@@ -30,6 +34,13 @@ export class CustomizableFormPlugin
         const { renderApp } = await import('./application');
         const [coreStart, depsStart] = await core.getStartServices();
         return renderApp(coreStart, depsStart, params);
+      },
+    });
+
+    contentManagement.registry.register({
+      id: CUSTOMIZABLE_FORM_CONTENT_ID,
+      version: {
+        latest: CUSTOMIZABLE_FORM_CONTENT_VERSION,
       },
     });
 
