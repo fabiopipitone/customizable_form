@@ -43,6 +43,7 @@ import { css } from '@emotion/react';
 import { loadActionTypes, loadAllActions } from '@kbn/triggers-actions-ui-plugin/public/common/constants';
 import type { ActionType } from '@kbn/actions-types';
 import type { ActionConnector } from '@kbn/alerts-ui-shared/src/common/types';
+import type { SaveResult } from '@kbn/saved-objects-plugin/public';
 
 import {
   FormConfig,
@@ -1001,13 +1002,13 @@ export const CustomizableFormBuilder = ({
   );
 
   const handleSaveVisualizationRequest = useCallback(() => {
-    const handleModalSave: SaveModalDashboardProps['onSave'] = async ({
+    const handleModalSave = async ({
       newTitle,
       newDescription,
       newCopyOnSave,
       dashboardId,
       addToLibrary,
-    }) => {
+    }: Parameters<SaveModalDashboardProps['onSave']>[0]): Promise<SaveResult> => {
       const titleInput = typeof newTitle === 'string' ? newTitle.trim() : '';
       const descriptionInput = typeof newDescription === 'string' ? newDescription.trim() : '';
       const attributes: CustomizableFormAttributesMeta = {
@@ -1067,13 +1068,9 @@ export const CustomizableFormBuilder = ({
           application.navigateToApp('dashboards', {
             path: dashboardId === 'new' ? '#/create' : `#/view/${dashboardId}`,
           });
-
-          return;
         }
 
-        window.setTimeout(() => window.location.reload(), 0);
-
-        return;
+        return { id: savedObject.id };
       } catch (error) {
         const message = getErrorMessage(error);
         toasts.addDanger({
@@ -1082,14 +1079,18 @@ export const CustomizableFormBuilder = ({
           }),
           text: message,
         });
-        throw new Error(message);
+        return { error: new Error(message) };
       } finally {
         setIsSaving(false);
       }
     };
 
+    const DashboardSaveModalComponent = SavedObjectSaveModalDashboard as unknown as React.ComponentType<
+      SaveModalDashboardProps<SaveResult>
+    >;
+
     showSaveModal(
-      <SavedObjectSaveModalDashboard
+      <DashboardSaveModalComponent
         documentInfo={{
           id: savedObjectId ?? undefined,
           title:
