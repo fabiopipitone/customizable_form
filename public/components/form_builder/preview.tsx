@@ -21,6 +21,10 @@ const previewInputPlaceholderStyles = css`
   }
 `;
 
+const previewContainerStyles = css`
+  padding: 0 0 16px 16px;
+`;
+
 export interface CustomizableFormPreviewProps {
   config: FormConfig;
   fieldValues: Record<string, string>;
@@ -54,7 +58,7 @@ export const CustomizableFormPreview = ({
   const showDescription = config.showDescription !== false;
 
   return (
-    <>
+    <div css={previewContainerStyles}>
       {showTitle ? (
         <EuiTitle size="l">
           <h1>{title}</h1>
@@ -131,6 +135,6 @@ export const CustomizableFormPreview = ({
           })}
         />
       )}
-    </>
+    </div>
   );
 };
