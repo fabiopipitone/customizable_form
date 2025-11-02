@@ -18,6 +18,7 @@ import {
   CUSTOMIZABLE_FORM_CONTENT_REGISTRATION,
   CustomizableFormStorage,
 } from './content_management/storage';
+import { CUSTOMIZABLE_FORM_EMBEDDABLE_TYPE } from '../common';
 
 export class CustomizableFormPlugin
   implements
@@ -38,7 +39,7 @@ export class CustomizableFormPlugin
 
   public setup(
     core: CoreSetup,
-    { contentManagement }: CustomizableFormPluginSetupDependencies
+    { contentManagement, embeddable }: CustomizableFormPluginSetupDependencies
   ) {
     this.logger.debug('customizableForm: Setup');
 
@@ -57,6 +58,10 @@ export class CustomizableFormPlugin
         logger: this.logger.get('contentManagement'),
         throwOnResultValidationError: this.isDev,
       }),
+    });
+
+    embeddable.registerEmbeddableFactory({
+      id: CUSTOMIZABLE_FORM_EMBEDDABLE_TYPE,
     });
 
     const router = core.http.createRouter();

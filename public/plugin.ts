@@ -11,7 +11,13 @@ import type {
   AppPluginStartDependencies,
   CustomizableFormPluginSetupDependencies,
 } from './types';
-import { PLUGIN_ID, PLUGIN_NAME, PLUGIN_ROUTE } from '../common';
+import {
+  PLUGIN_ID,
+  PLUGIN_NAME,
+  PLUGIN_ROUTE,
+  CUSTOMIZABLE_FORM_EMBEDDABLE_TYPE,
+  CUSTOMIZABLE_FORM_SAVED_OBJECT_TYPE,
+} from '../common';
 import {
   CUSTOMIZABLE_FORM_CONTENT_ID,
   CUSTOMIZABLE_FORM_CONTENT_VERSION,
@@ -23,8 +29,10 @@ export class CustomizableFormPlugin
 {
   public setup(
     core: CoreSetup<AppPluginStartDependencies>,
-    { visualizations, contentManagement }: CustomizableFormPluginSetupDependencies
+    { visualizations, contentManagement, embeddable }: CustomizableFormPluginSetupDependencies
   ): CustomizableFormPluginSetup {
+    const startServicesPromise = core.getStartServices();
+
     core.application.register({
       id: PLUGIN_ID,
       title: PLUGIN_NAME,
@@ -32,7 +40,7 @@ export class CustomizableFormPlugin
       visibleIn: [],
       async mount(params: AppMountParameters) {
         const { renderApp } = await import('./application');
-        const [coreStart, depsStart] = await core.getStartServices();
+        const [coreStart, depsStart] = await startServicesPromise;
         return renderApp(coreStart, depsStart, params);
       },
     });
@@ -45,6 +53,35 @@ export class CustomizableFormPlugin
     });
 
     visualizations.registerAlias(customizableFormVisTypeAlias);
+
+    embeddable.registerReactEmbeddableFactory(
+      CUSTOMIZABLE_FORM_EMBEDDABLE_TYPE,
+      async () => {
+        const { getCustomizableFormEmbeddableFactory } = await import('./embeddable');
+        const [coreStart] = await startServicesPromise;
+        return getCustomizableFormEmbeddableFactory({ coreStart });
+      }
+    );
+
+    embeddable.registerAddFromLibraryType({
+      savedObjectType: CUSTOMIZABLE_FORM_SAVED_OBJECT_TYPE,
+      savedObjectName: PLUGIN_NAME,
+      getIconForSavedObject: () => 'controlsHorizontal',
+      onAdd: (container, savedObject) => {
+        container.addNewPanel(
+          {
+            panelType: CUSTOMIZABLE_FORM_EMBEDDABLE_TYPE,
+            serializedState: {
+              rawState: {
+                savedObjectId: savedObject.id,
+              },
+              references: savedObject.references ?? [],
+            },
+          },
+          true
+        );
+      },
+    });
 
     return {
       getGreeting() {
