@@ -4,8 +4,10 @@ import { EuiCallOut, EuiLoadingSpinner, EuiSpacer, EuiText } from '@elastic/eui'
 import type { CoreStart } from '@kbn/core/public';
 import { i18n } from '@kbn/i18n';
 import type { EmbeddableFactory } from '@kbn/embeddable-plugin/public';
+import { initializeUnsavedChanges } from '@kbn/presentation-containers';
+import { initializeTitleManager, titleComparators } from '@kbn/presentation-publishing';
 
-import { CUSTOMIZABLE_FORM_EMBEDDABLE_TYPE } from '../../common';
+import { CUSTOMIZABLE_FORM_EMBEDDABLE_TYPE, PLUGIN_ID, PLUGIN_NAME } from '../../common';
 import type { FormConfig } from '../components/form_builder/types';
 import { CustomizableFormPreview } from '../components/form_builder/preview';
 import {
@@ -56,28 +58,84 @@ export const getCustomizableFormEmbeddableFactory = ({
 }): EmbeddableFactory<CustomizableFormEmbeddableSerializedState, CustomizableFormEmbeddableApi> => {
   return {
     type: CUSTOMIZABLE_FORM_EMBEDDABLE_TYPE,
-    buildEmbeddable: async ({ initialState, finalizeApi }) => {
-      let latestState: CustomizableFormEmbeddableSerializedState = initialState.rawState ?? {};
+    buildEmbeddable: async ({ initialState, finalizeApi, parentApi, uuid }) => {
+      const initialRawState: CustomizableFormEmbeddableSerializedState = initialState.rawState ?? {};
+      let savedObjectIdRef: string | null = initialRawState.savedObjectId ?? null;
+      let attributesRef = initialRawState.attributes;
       let latestReferences = initialState.references ?? [];
+
+      const titleManager = initializeTitleManager({
+        title: initialRawState.title,
+        description: initialRawState.description,
+        hidePanelTitles: initialRawState.hidePanelTitles,
+      });
 
       const defaultTitle$ = new BehaviorSubject<string | undefined>(undefined);
       const defaultDescription$ = new BehaviorSubject<string | undefined>(undefined);
 
-      const setLatestState = (
-        nextState: CustomizableFormEmbeddableSerializedState,
+      const serializeState = () => ({
+        rawState: {
+          ...titleManager.getLatestState(),
+          savedObjectId: savedObjectIdRef ?? undefined,
+          attributes: attributesRef,
+        },
+        references: latestReferences,
+      });
+
+      const updateStateRefs = (
+        partialState: Partial<CustomizableFormEmbeddableSerializedState>,
         references = latestReferences
       ) => {
-        latestState = nextState;
+        if ('savedObjectId' in partialState) {
+          savedObjectIdRef = partialState.savedObjectId ?? null;
+        }
+        if ('attributes' in partialState) {
+          attributesRef = partialState.attributes;
+        }
         latestReferences = references;
       };
 
+      const unsavedChangesApi = initializeUnsavedChanges<CustomizableFormEmbeddableSerializedState>({
+        uuid,
+        parentApi,
+        serializeState,
+        anyStateChange$: titleManager.anyStateChange$,
+        getComparators: () => ({
+          ...titleComparators,
+          savedObjectId: 'referenceEquality',
+          attributes: 'skip',
+        }),
+        onReset: (lastSaved) => {
+          titleManager.reinitializeState(lastSaved?.rawState ?? {});
+          if (lastSaved?.rawState) {
+            if ('savedObjectId' in lastSaved.rawState) {
+              savedObjectIdRef = lastSaved.rawState.savedObjectId ?? null;
+            }
+            if ('attributes' in lastSaved.rawState) {
+              attributesRef = lastSaved.rawState.attributes;
+            }
+          }
+          latestReferences = lastSaved?.references ?? latestReferences;
+        },
+      });
+
       const api = finalizeApi({
+        ...titleManager.api,
+        ...unsavedChangesApi,
         defaultTitle$,
         defaultDescription$,
-        serializeState: () => ({
-          rawState: latestState,
-          references: latestReferences,
-        }),
+        serializeState,
+        onEdit: async () => {
+          if (savedObjectIdRef) {
+            await coreStart.application.navigateToApp(PLUGIN_ID, {
+              path: `/edit/${encodeURIComponent(savedObjectIdRef)}`,
+            });
+          } else {
+            await coreStart.application.navigateToApp(PLUGIN_ID, { path: '/create' });
+          }
+        },
+        isEditingEnabled: () => Boolean(savedObjectIdRef),
+        getTypeDisplayName: () => PLUGIN_NAME,
       });
 
       const http = coreStart.http;
@@ -85,16 +143,16 @@ export const getCustomizableFormEmbeddableFactory = ({
 
       const Component: React.FC = () => {
         const [currentSavedObjectId, setCurrentSavedObjectId] = useState<string | null>(
-          latestState.savedObjectId ?? null
+          savedObjectIdRef
         );
         const hasSavedObjectReference = Boolean(currentSavedObjectId);
 
         const initialDocument = useMemo(() => {
-          if (latestState.attributes) {
-            return documentFromAttributes(latestState.attributes);
+          if (attributesRef) {
+            return documentFromAttributes(attributesRef);
           }
           return null;
-        }, [latestState.attributes]);
+        }, [attributesRef]);
 
         const [document, setDocument] = useState<CustomizableFormDocument | null>(initialDocument);
         const [fieldValues, setFieldValues] = useState<Record<string, string>>(
@@ -107,7 +165,7 @@ export const getCustomizableFormEmbeddableFactory = ({
 
         useEffect(() => {
           if (!document) {
-            defaultTitle$.next(undefined);
+            defaultTitle$.next(PLUGIN_NAME);
             defaultDescription$.next(undefined);
             return;
           }
@@ -138,7 +196,7 @@ export const getCustomizableFormEmbeddableFactory = ({
               setDocument(loadedDocument);
               setFieldValues(buildInitialFieldValues(loadedDocument.formConfig));
 
-              setLatestState(
+              updateStateRefs(
                 {
                   savedObjectId: resolveResult.saved_object.id,
                 },

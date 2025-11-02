@@ -63,6 +63,8 @@ import {
   getDocumentFromResolveResponse,
   type CustomizableFormAttributesMeta,
 } from '../../services/persistence';
+import { CUSTOMIZABLE_FORM_EMBEDDABLE_TYPE } from '../../../common';
+import { getEmbeddableStateTransfer } from '../../services/embeddable_state_transfer';
 
 const SavedObjectSaveModalDashboard = withSuspense(LazySavedObjectSaveModalDashboard);
 
@@ -1003,7 +1005,6 @@ export const CustomizableFormBuilder = ({
       };
 
       const shouldCreateNew = newCopyOnSave || !savedObjectId;
-      const shouldNavigateToDashboard = Boolean(dashboardId);
 
       setIsSaving(true);
 
@@ -1046,11 +1047,22 @@ export const CustomizableFormBuilder = ({
                 'By-value panels are not yet supported. The saved form will be available from the library.',
             }),
           });
-        }
-
-        if (shouldNavigateToDashboard) {
           application.navigateToApp('dashboards', {
             path: dashboardId === 'new' ? '#/create' : `#/view/${dashboardId}`,
+          });
+        } else if (dashboardId) {
+          const stateTransfer = getEmbeddableStateTransfer();
+          await stateTransfer.navigateToWithEmbeddablePackage('dashboards', {
+            path: dashboardId === 'new' ? '#/create' : `#/view/${dashboardId}`,
+            state: {
+              type: CUSTOMIZABLE_FORM_EMBEDDABLE_TYPE,
+              serializedState: {
+                rawState: {
+                  savedObjectId: savedObject.id,
+                },
+                references: savedObject.references ?? [],
+              },
+            },
           });
         }
 

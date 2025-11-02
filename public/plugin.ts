@@ -23,6 +23,7 @@ import {
   CUSTOMIZABLE_FORM_CONTENT_VERSION,
 } from '../common/content_management';
 import { customizableFormVisTypeAlias } from './vis_type_alias';
+import { setEmbeddableStateTransfer } from './services/embeddable_state_transfer';
 
 export class CustomizableFormPlugin
   implements Plugin<CustomizableFormPluginSetup, CustomizableFormPluginStart>
@@ -95,7 +96,8 @@ export class CustomizableFormPlugin
     };
   }
 
-  public start(core: CoreStart): CustomizableFormPluginStart {
+  public start(core: CoreStart, { embeddable }: AppPluginStartDependencies): CustomizableFormPluginStart {
+    setEmbeddableStateTransfer(embeddable.getStateTransfer());
     return {};
   }
 
