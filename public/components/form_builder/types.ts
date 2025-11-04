@@ -25,6 +25,7 @@ export interface FormConfig {
   description: string;
   showTitle: boolean;
   showDescription: boolean;
+  layoutColumns: 1 | 2 | 3;
   connectors: FormConnectorConfig[];
   fields: FormFieldConfig[];
 }

@@ -23,6 +23,7 @@ export interface SerializedFormConfig {
   description: string;
   showTitle: boolean;
   showDescription: boolean;
+  layoutColumns?: number;
   connectors: SerializedConnectorConfig[];
   fields: SerializedFieldConfig[];
 }
@@ -50,6 +51,7 @@ export const serializeFormConfig = (config: FormConfig): SerializedFormConfig =>
   description: config.description,
   showTitle: config.showTitle,
   showDescription: config.showDescription,
+  layoutColumns: config.layoutColumns,
   connectors: config.connectors.map(serializeConnector),
   fields: config.fields.map(serializeField),
 });
@@ -80,6 +82,10 @@ export const deserializeFormConfig = (serialized: SerializedFormConfig): FormCon
   description: serialized.description,
   showTitle: serialized.showTitle,
   showDescription: serialized.showDescription,
+  layoutColumns:
+    typeof serialized.layoutColumns === 'number' && serialized.layoutColumns >= 1 && serialized.layoutColumns <= 3
+      ? (Math.round(serialized.layoutColumns) as 1 | 2 | 3)
+      : 1,
   connectors: serialized.connectors.map(deserializeConnector),
   fields: serialized.fields.map(deserializeField),
 });

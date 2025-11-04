@@ -25,6 +25,26 @@ const previewContainerStyles = css`
   padding: 0 0 16px 16px;
 `;
 
+const GRID_GAP = 16;
+
+const getPreviewGridStyles = (columns: number) => css`
+  display: grid;
+  gap: ${GRID_GAP}px;
+  grid-template-columns: repeat(${columns}, minmax(0, 1fr));
+
+  @media (max-width: 1199px) {
+    grid-template-columns: repeat(${Math.min(columns, 2)}, minmax(0, 1fr));
+  }
+
+  @media (max-width: 767px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const gridCellStyles = css`
+  min-width: 0;
+`;
+
 export interface CustomizableFormPreviewProps {
   config: FormConfig;
   fieldValues: Record<string, string>;
@@ -41,6 +61,9 @@ export const CustomizableFormPreview = ({
   onSubmit,
 }: CustomizableFormPreviewProps) => {
   const hasFields = config.fields.length > 0;
+  const rawColumns = typeof config.layoutColumns === 'number' ? config.layoutColumns : 1;
+  const columnCount = Math.min(Math.max(Math.round(rawColumns), 1), 3) as 1 | 2 | 3;
+  const gridStyles = getPreviewGridStyles(columnCount);
   const title = config.title?.trim()
     ? config.title
     : i18n.translate('customizableForm.builder.previewFallbackTitle', {
@@ -75,41 +98,44 @@ export const CustomizableFormPreview = ({
 
       {hasFields ? (
         <EuiForm component="form" onSubmit={(event) => event.preventDefault()}>
-          {config.fields.map((field) => (
-            <EuiFormRow
-              key={field.id}
-              label={field.label || field.key}
-              labelAppend={
-                <EuiText size="xs" color="subdued">
-                  {field.required
-                    ? i18n.translate('customizableForm.builder.previewFieldRequiredLabel', {
-                        defaultMessage: 'Required',
-                      })
-                    : i18n.translate('customizableForm.builder.previewFieldOptionalLabel', {
-                        defaultMessage: 'Optional',
-                      })}
-                </EuiText>
-              }
-            >
-              {field.type === 'textarea' ? (
-                <EuiTextArea
-                  placeholder={field.placeholder}
-                  aria-label={field.label || field.key}
-                  value={fieldValues[field.id] ?? ''}
-                  onChange={(event) => onFieldValueChange(field.id, event.target.value)}
-                  css={previewInputPlaceholderStyles}
-                />
-              ) : (
-                <EuiFieldText
-                  placeholder={field.placeholder}
-                  aria-label={field.label || field.key}
-                  value={fieldValues[field.id] ?? ''}
-                  onChange={(event) => onFieldValueChange(field.id, event.target.value)}
-                  css={previewInputPlaceholderStyles}
-                />
-              )}
-            </EuiFormRow>
-          ))}
+          <div css={gridStyles}>
+            {config.fields.map((field) => (
+              <div key={field.id} css={gridCellStyles}>
+                <EuiFormRow
+                  label={field.label || field.key}
+                  labelAppend={
+                    <EuiText size="xs" color="subdued">
+                      {field.required
+                        ? i18n.translate('customizableForm.builder.previewFieldRequiredLabel', {
+                            defaultMessage: 'Required',
+                          })
+                        : i18n.translate('customizableForm.builder.previewFieldOptionalLabel', {
+                            defaultMessage: 'Optional',
+                          })}
+                    </EuiText>
+                  }
+                >
+                  {field.type === 'textarea' ? (
+                    <EuiTextArea
+                      placeholder={field.placeholder}
+                      aria-label={field.label || field.key}
+                      value={fieldValues[field.id] ?? ''}
+                      onChange={(event) => onFieldValueChange(field.id, event.target.value)}
+                      css={previewInputPlaceholderStyles}
+                    />
+                  ) : (
+                    <EuiFieldText
+                      placeholder={field.placeholder}
+                      aria-label={field.label || field.key}
+                      value={fieldValues[field.id] ?? ''}
+                      onChange={(event) => onFieldValueChange(field.id, event.target.value)}
+                      css={previewInputPlaceholderStyles}
+                    />
+                  )}
+                </EuiFormRow>
+              </div>
+            ))}
+          </div>
 
           <EuiSpacer size="m" />
 

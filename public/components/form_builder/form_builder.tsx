@@ -17,6 +17,7 @@ import {
 import {
   EuiAccordion,
   EuiButton,
+  EuiButtonGroup,
   EuiButtonIcon,
   EuiCallOut,
   EuiCodeBlock,
@@ -131,6 +132,7 @@ const INITIAL_CONFIG: FormConfig = {
   }),
   showTitle: true,
   showDescription: true,
+  layoutColumns: 1,
   connectors: INITIAL_CONNECTORS,
   fields: [
     {
@@ -1243,6 +1245,7 @@ export const CustomizableFormBuilder = ({
             onDescriptionChange={(v) => updateConfig({ description: v })}
             onShowTitleChange={(show) => updateConfig({ showTitle: show })}
             onShowDescriptionChange={(show) => updateConfig({ showDescription: show })}
+            onLayoutColumnsChange={(cols) => updateConfig({ layoutColumns: cols })}
             onConnectorTypeChange={handleConnectorTypeChange}
             onConnectorChange={handleConnectorChange}
             onConnectorLabelChange={handleConnectorLabelChange}
@@ -1279,6 +1282,7 @@ interface ConfigurationPanelProps {
   onDescriptionChange: (value: string) => void;
   onShowTitleChange: (value: boolean) => void;
   onShowDescriptionChange: (value: boolean) => void;
+  onLayoutColumnsChange: (value: 1 | 2 | 3) => void;
   onConnectorTypeChange: (connectorConfigId: string, value: string) => void;
   onConnectorChange: (connectorConfigId: string, value: string) => void;
   onConnectorLabelChange: (connectorConfigId: string, value: string) => void;
@@ -1321,6 +1325,7 @@ const ConfigurationPanel = ({
   onFieldChange,
   onFieldRemove,
   onAddField,
+  onLayoutColumnsChange,
   onSaveRequest,
   connectorTypeOptions,
   connectorTypes,
@@ -1441,18 +1446,65 @@ const ConfigurationPanel = ({
               defaultMessage: 'Description',
             })}
           >
-            <EuiTextArea
-              resize="vertical"
-              value={config.description}
-              disabled={!config.showDescription}
-              onChange={(e) => onDescriptionChange(e.target.value)}
-              aria-label={i18n.translate('customizableForm.builder.formDescriptionAria', {
-                defaultMessage: 'Form description',
-              })}
-            />
-          </EuiFormRow>
-        </EuiForm>
-      ) : null}
+          <EuiTextArea
+            resize="vertical"
+            value={config.description}
+            disabled={!config.showDescription}
+            onChange={(e) => onDescriptionChange(e.target.value)}
+            aria-label={i18n.translate('customizableForm.builder.formDescriptionAria', {
+              defaultMessage: 'Form description',
+            })}
+          />
+        </EuiFormRow>
+
+        <EuiFormRow
+          label={i18n.translate('customizableForm.builder.layoutColumnsLabel', {
+            defaultMessage: 'Preview columns',
+          })}
+          helpText={i18n.translate('customizableForm.builder.layoutColumnsHelpText', {
+            defaultMessage: 'Choose how many columns the preview should use on wide screens.',
+          })}
+        >
+          <EuiButtonGroup
+            legend={i18n.translate('customizableForm.builder.layoutColumnsLegend', {
+              defaultMessage: 'Select the number of columns',
+            })}
+            options={[
+              {
+                id: 'layout-columns-1',
+                label: i18n.translate('customizableForm.builder.layoutColumns.optionOne', {
+                  defaultMessage: 'Single column',
+                }),
+              },
+              {
+                id: 'layout-columns-2',
+                label: i18n.translate('customizableForm.builder.layoutColumns.optionTwo', {
+                  defaultMessage: 'Two columns',
+                }),
+              },
+              {
+                id: 'layout-columns-3',
+                label: i18n.translate('customizableForm.builder.layoutColumns.optionThree', {
+                  defaultMessage: 'Three columns',
+                }),
+              },
+            ]}
+            idSelected={`layout-columns-${config.layoutColumns}`}
+            onChange={(optionId) => {
+              const map: Record<string, 1 | 2 | 3> = {
+                'layout-columns-1': 1,
+                'layout-columns-2': 2,
+                'layout-columns-3': 3,
+              };
+              const next = map[optionId] ?? config.layoutColumns;
+              onLayoutColumnsChange(next);
+            }}
+            buttonSize="compressed"
+            isFullWidth
+          />
+        </EuiFormRow>
+      </EuiForm>
+    ) : null}
 
       {activeTab === 'connectors' ? (
         <>
