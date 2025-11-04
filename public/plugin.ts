@@ -67,7 +67,7 @@ export class CustomizableFormPlugin
     embeddable.registerAddFromLibraryType({
       savedObjectType: CUSTOMIZABLE_FORM_SAVED_OBJECT_TYPE,
       savedObjectName: PLUGIN_NAME,
-      getIconForSavedObject: () => 'controlsHorizontal',
+      getIconForSavedObject: () => 'tableOfContents',
       onAdd: (container, savedObject) => {
         container.addNewPanel(
           {

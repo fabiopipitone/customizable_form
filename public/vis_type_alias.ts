@@ -23,7 +23,7 @@ export const customizableFormVisTypeAlias: VisTypeAlias = {
   description: i18n.translate('customizableForm.visTypeAlias.description', {
     defaultMessage: 'Create a custom form to make your dashboard interactive.',
   }),
-  icon: 'controlsHorizontal',
+  icon: 'tableOfContents',
   stage: 'experimental',
   order: 70,
   appExtensions: {
@@ -41,7 +41,7 @@ export const customizableFormVisTypeAlias: VisTypeAlias = {
           description,
           updatedAt,
           managed,
-          icon: 'controlsHorizontal',
+          icon: 'tableOfContents',
           stage: 'experimental' as const,
           savedObjectType: type ?? CUSTOMIZABLE_FORM_SAVED_OBJECT_TYPE,
           type: CUSTOMIZABLE_FORM_EMBEDDABLE_TYPE,

@@ -1,6 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { BehaviorSubject } from 'rxjs';
-import { EuiCallOut, EuiLoadingSpinner, EuiSpacer, EuiText } from '@elastic/eui';
+import {
+  EuiCallOut,
+  EuiConfirmModal,
+  EuiLoadingSpinner,
+  EuiOverlayMask,
+  EuiSpacer,
+  EuiText,
+} from '@elastic/eui';
 import type { CoreStart } from '@kbn/core/public';
 import { i18n } from '@kbn/i18n';
 import type { EmbeddableFactory } from '@kbn/embeddable-plugin/public';
@@ -27,6 +34,12 @@ import type {
 } from './types';
 import { executeFormConnectors } from '../services/execute_connectors';
 import { validateVariableName } from '../components/form_builder/validation';
+import {
+  ConnectorSummaryTable,
+  DEFAULT_CONNECTOR_SUMMARY_STATUS,
+  type ConnectorSummaryItem,
+  type ConnectorSummaryStatus,
+} from '../components/form_builder/connector_summary';
 
 const buildInitialFieldValues = (config: FormConfig): Record<string, string> =>
   config.fields.reduce<Record<string, string>>((acc, field) => {
@@ -165,6 +178,7 @@ export const getCustomizableFormEmbeddableFactory = ({
           initialDocument ? buildInitialFieldValues(initialDocument.formConfig) : {}
         );
         const [isSubmitting, setIsSubmitting] = useState(false);
+        const [isSubmitConfirmationVisible, setIsSubmitConfirmationVisible] = useState(false);
         const [isLoading, setIsLoading] = useState<boolean>(
           hasSavedObjectReference && !initialDocument
         );
@@ -321,6 +335,57 @@ export const getCustomizableFormEmbeddableFactory = ({
           return map;
         }, [document]);
 
+        const connectorSummaryItems = useMemo<ConnectorSummaryItem[]>(() => {
+          if (!document) {
+            return [];
+          }
+
+          return document.formConfig.connectors.map((connector, index) => {
+            const label =
+              (connector.label || '').trim() ||
+              i18n.translate('customizableForm.embeddable.connectorFallbackLabel', {
+                defaultMessage: 'Connector {number}',
+                values: { number: index + 1 },
+              });
+
+            const connectorName =
+              connector.connectorId && connector.connectorId.trim().length > 0
+                ? connector.connectorId
+                : i18n.translate('customizableForm.embeddable.connectorSummary.noConnectorSelected', {
+                    defaultMessage: 'Not selected',
+                  });
+
+            const connectorTypeLabel =
+              connector.connectorTypeId && connector.connectorTypeId.trim().length > 0
+                ? connector.connectorTypeId
+                : i18n.translate('customizableForm.embeddable.connectorSummary.typeUnknown', {
+                    defaultMessage: 'Not specified',
+                  });
+
+            const hasError =
+              !(connector.label || '').trim() ||
+              !connector.connectorTypeId ||
+              connector.connectorTypeId.trim().length === 0 ||
+              !connector.connectorId ||
+              connector.connectorId.trim().length === 0;
+
+            const status: ConnectorSummaryStatus = hasError
+              ? {
+                  ...DEFAULT_CONNECTOR_SUMMARY_STATUS,
+                  hasError: true,
+                }
+              : DEFAULT_CONNECTOR_SUMMARY_STATUS;
+
+            return {
+              id: connector.id,
+              label,
+              connectorName,
+              connectorTypeLabel,
+              status,
+            };
+          });
+        }, [document]);
+
         const isSubmitDisabled = useMemo(() => {
           if (!document) {
             return true;
@@ -348,7 +413,7 @@ export const getCustomizableFormEmbeddableFactory = ({
           isSubmitting,
         ]);
 
-        const handleSubmit = useCallback(async () => {
+        const executeConnectorsNow = useCallback(async () => {
           if (!document || isSubmitting) {
             return;
           }
@@ -378,7 +443,8 @@ export const getCustomizableFormEmbeddableFactory = ({
             const errors = results.filter((result) => result.status === 'error');
 
             successes.forEach((result) => {
-              const label = connectorLabelsById[result.connector.id] ?? result.connector.label ?? result.connector.id;
+              const label =
+                connectorLabelsById[result.connector.id] ?? result.connector.label ?? result.connector.id;
               toasts.addSuccess({
                 title: i18n.translate('customizableForm.embeddable.executeConnectors.successTitle', {
                   defaultMessage: 'Connector executed',
@@ -391,7 +457,8 @@ export const getCustomizableFormEmbeddableFactory = ({
             });
 
             errors.forEach((result) => {
-              const label = connectorLabelsById[result.connector.id] ?? result.connector.label ?? result.connector.id;
+              const label =
+                connectorLabelsById[result.connector.id] ?? result.connector.label ?? result.connector.id;
               toasts.addDanger({
                 title: i18n.translate('customizableForm.embeddable.executeConnectors.errorTitle', {
                   defaultMessage: 'Connector execution failed',
@@ -422,6 +489,45 @@ export const getCustomizableFormEmbeddableFactory = ({
           connectorLabelsById,
           toasts,
         ]);
+
+        const handleSubmit = useCallback(() => {
+          if (!document || isSubmitting) {
+            return;
+          }
+
+          if (document.formConfig.connectors.length === 0) {
+            toasts.addWarning({
+              title: i18n.translate('customizableForm.embeddable.executeConnectors.noConnectorsTitle', {
+                defaultMessage: 'No connectors configured',
+              }),
+              text: i18n.translate('customizableForm.embeddable.executeConnectors.noConnectorsBody', {
+                defaultMessage: 'Add at least one connector in the form configuration to submit.',
+              }),
+            });
+            return;
+          }
+
+          if (document.formConfig.requireConfirmationOnSubmit) {
+            setIsSubmitConfirmationVisible(true);
+            return;
+          }
+
+          executeConnectorsNow();
+        }, [
+          document,
+          executeConnectorsNow,
+          isSubmitting,
+          toasts,
+        ]);
+
+        const handleConfirmConnectorExecution = useCallback(() => {
+          setIsSubmitConfirmationVisible(false);
+          executeConnectorsNow();
+        }, [executeConnectorsNow]);
+
+        const handleCancelConnectorExecution = useCallback(() => {
+          setIsSubmitConfirmationVisible(false);
+        }, []);
 
         if (isLoading) {
           return (
@@ -477,23 +583,54 @@ export const getCustomizableFormEmbeddableFactory = ({
         }
 
         return (
-          <div style={{ width: '100%' }}>
-            <CustomizableFormPreview
-              config={document.formConfig}
-              fieldValues={fieldValues}
-              onFieldValueChange={handleFieldValueChange}
-              isSubmitDisabled={isSubmitDisabled}
-              onSubmit={handleSubmit}
-              validationByFieldId={fieldValidationById}
-              isSubmitting={isSubmitting}
-            />
-            <EuiSpacer size="s" />
-            <EuiText color="subdued" size="s">
-              {i18n.translate('customizableForm.embeddable.connectorPlaceholder', {
-                defaultMessage: 'Submitting executes the configured connectors.',
-              })}
-            </EuiText>
-          </div>
+          <>
+            {isSubmitConfirmationVisible ? (
+              <EuiOverlayMask>
+                <EuiConfirmModal
+                  title={i18n.translate('customizableForm.embeddable.executeConfirmModalTitle', {
+                    defaultMessage: 'Execute connectors?',
+                  })}
+                  onCancel={handleCancelConnectorExecution}
+                  onConfirm={handleConfirmConnectorExecution}
+                  cancelButtonText={i18n.translate('customizableForm.embeddable.executeConfirmModalCancel', {
+                    defaultMessage: 'Cancel',
+                  })}
+                  confirmButtonText={i18n.translate('customizableForm.embeddable.executeConfirmModalConfirm', {
+                    defaultMessage: 'Execute connectors',
+                  })}
+                  defaultFocusedButton="confirm"
+                >
+                  <EuiText size="s">
+                    <p>
+                      {i18n.translate('customizableForm.embeddable.executeConfirmModalBody', {
+                        defaultMessage: 'You are about to trigger the following connectors.',
+                      })}
+                    </p>
+                  </EuiText>
+                  <EuiSpacer size="m" />
+                  <ConnectorSummaryTable items={connectorSummaryItems} />
+                </EuiConfirmModal>
+              </EuiOverlayMask>
+            ) : null}
+
+            <div style={{ width: '100%' }}>
+              <CustomizableFormPreview
+                config={document.formConfig}
+                fieldValues={fieldValues}
+                onFieldValueChange={handleFieldValueChange}
+                isSubmitDisabled={isSubmitDisabled}
+                onSubmit={handleSubmit}
+                validationByFieldId={fieldValidationById}
+                isSubmitting={isSubmitting}
+              />
+              <EuiSpacer size="s" />
+              <EuiText color="subdued" size="s">
+                {i18n.translate('customizableForm.embeddable.connectorPlaceholder', {
+                  defaultMessage: 'Submitting executes the configured connectors.',
+                })}
+              </EuiText>
+            </div>
+          </>
         );
       };
 

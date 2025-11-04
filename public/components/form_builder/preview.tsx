@@ -321,7 +321,7 @@ export const CustomizableFormPreview = ({
         </EuiForm>
       ) : (
         <EuiEmptyPrompt
-          iconType="controlsHorizontal"
+          iconType="tableOfContents"
           title={
             <h3>
               {i18n.translate('customizableForm.builder.previewEmptyStateTitle', {

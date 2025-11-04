@@ -1,5 +1,10 @@
-import type { SavedObjectsServiceSetup } from '@kbn/core/server';
-import { CUSTOMIZABLE_FORM_SAVED_OBJECT_TYPE, PLUGIN_NAME, PLUGIN_ROUTE } from '../common';
+import type { SavedObject, SavedObjectsServiceSetup } from '@kbn/core/server';
+import {
+  CUSTOMIZABLE_FORM_SAVED_OBJECT_TYPE,
+  PLUGIN_NAME,
+  PLUGIN_ROUTE,
+  type CustomizableFormSavedObjectAttributes,
+} from '../common';
 
 export const registerCustomizableFormSavedObjectType = (
   savedObjects: SavedObjectsServiceSetup
@@ -11,13 +16,14 @@ export const registerCustomizableFormSavedObjectType = (
     management: {
       displayName: PLUGIN_NAME,
       importableAndExportable: true,
-      getTitle: (savedObject) => savedObject.attributes.title,
+      getTitle: (savedObject: SavedObject<CustomizableFormSavedObjectAttributes>) =>
+        savedObject.attributes.title,
       getInAppUrl: ({ id }) => ({
         path: `${PLUGIN_ROUTE}#/edit/${encodeURIComponent(id)}`,
         uiCapabilitiesPath: 'customizableForm.show',
       }),
       defaultSearchField: 'title',
-      icon: 'controlsHorizontal',
+      icon: 'tableOfContents',
     },
     mappings: {
       dynamic: false,

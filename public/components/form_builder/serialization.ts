@@ -68,6 +68,7 @@ export interface SerializedFormConfig {
   showTitle: boolean;
   showDescription: boolean;
   layoutColumns?: number;
+  requireConfirmationOnSubmit?: boolean;
   connectors: SerializedConnectorConfig[];
   fields: SerializedFieldConfig[];
 }
@@ -98,6 +99,7 @@ export const serializeFormConfig = (config: FormConfig): SerializedFormConfig =>
   showTitle: config.showTitle,
   showDescription: config.showDescription,
   layoutColumns: normalizeLayoutColumns(config.layoutColumns),
+  requireConfirmationOnSubmit: config.requireConfirmationOnSubmit,
   connectors: config.connectors.map(serializeConnector),
   fields: config.fields.map(serializeField),
 });
@@ -133,6 +135,7 @@ export const deserializeFormConfig = (serialized: SerializedFormConfig): FormCon
   description: serialized.description,
   showTitle: serialized.showTitle,
   showDescription: serialized.showDescription,
+  requireConfirmationOnSubmit: serialized.requireConfirmationOnSubmit === true,
   layoutColumns: normalizeLayoutColumns(serialized.layoutColumns),
   connectors: serialized.connectors.map(deserializeConnector),
   fields: serialized.fields.map(deserializeField),

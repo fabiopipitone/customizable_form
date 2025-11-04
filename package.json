@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "bootstrap": "yarn kbn bootstrap && yarn install",
-    "build": "yarn plugin-helpers build",
+    "build": "BROWSERSLIST_IGNORE_OLD_DATA=1 yarn plugin-helpers build",
     "dev": "yarn plugin-helpers dev",
     "plugin-helpers": "node ../../scripts/plugin_helpers",
     "kbn": "node ../../scripts/kbn"

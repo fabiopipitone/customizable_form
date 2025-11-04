@@ -17,6 +17,7 @@ import {
 import {
   EuiAccordion,
   EuiButton,
+  EuiConfirmModal,
   EuiButtonIcon,
   EuiCallOut,
   EuiCodeBlock,
@@ -33,6 +34,7 @@ import {
   EuiFormRow,
   EuiIcon,
   EuiLoadingSpinner,
+  EuiOverlayMask,
   EuiPanel,
   EuiSelect,
   EuiSpacer,
@@ -76,6 +78,12 @@ import {
   getFieldValidationResult,
   type FieldValidationResult,
 } from './preview';
+import {
+  ConnectorSummaryTable,
+  DEFAULT_CONNECTOR_SUMMARY_STATUS,
+  type ConnectorSummaryItem,
+  type ConnectorSummaryStatus,
+} from './connector_summary';
 import { executeFormConnectors } from '../../services/execute_connectors';
 import {
   createCustomizableForm,
@@ -156,6 +164,7 @@ const INITIAL_CONFIG: FormConfig = {
   showTitle: true,
   showDescription: true,
   layoutColumns: DEFAULT_LAYOUT_COLUMNS,
+  requireConfirmationOnSubmit: false,
   connectors: INITIAL_CONNECTORS,
   fields: [
     {
@@ -289,28 +298,8 @@ const PreviewCard = ({
   </EuiPanel>
 );
 
-const connectorSummaryRowBaseStyles = css`
-  padding: 8px 12px;
-  border-radius: 4px;
-`;
-
-const connectorSummaryHeaderTextStyles = css`
-  font-size: 0.95rem;
-`;
-
-type ConnectorStatus = {
-  hasWarning: boolean;
-  hasError: boolean;
-  hasTemplateWarning: boolean;
-  hasTemplateError: boolean;
-};
-
-const DEFAULT_CONNECTOR_STATUS: ConnectorStatus = {
-  hasWarning: false,
-  hasError: false,
-  hasTemplateWarning: false,
-  hasTemplateError: false,
-};
+type ConnectorStatus = ConnectorSummaryStatus;
+const DEFAULT_CONNECTOR_STATUS: ConnectorStatus = DEFAULT_CONNECTOR_SUMMARY_STATUS;
 
 type ConnectorSelectionStateEntry = {
   connectorsForType: Array<ActionConnector & { actionTypeId: SupportedConnectorTypeId }>;
@@ -341,6 +330,7 @@ export const CustomizableFormBuilder = ({
   const [initialLoadError, setInitialLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isExecutingConnectors, setIsExecutingConnectors] = useState<boolean>(false);
+  const [isSubmitConfirmationVisible, setIsSubmitConfirmationVisible] = useState<boolean>(false);
 
   const [connectorTypes, setConnectorTypes] = useState<
     Array<ActionType & { id: SupportedConnectorTypeId }>
@@ -1260,6 +1250,31 @@ export const CustomizableFormBuilder = ({
     [formConfig.connectors, connectorTypes, connectors, connectorStatusById]
   );
 
+  const connectorSummaryItems = useMemo<ConnectorSummaryItem[]>(() => {
+    return connectorSummaries.map((summary, index) => {
+      const connectorName =
+        summary.connector?.name ??
+        i18n.translate('customizableForm.builder.connectorSummary.connectorFallback', {
+          defaultMessage: 'Unnamed connector {index}',
+          values: { index: index + 1 },
+        });
+      const rawTypeLabel =
+        summary.type?.name ??
+        summary.connector?.actionTypeId ??
+        summary.config.connectorTypeId;
+      const typeLabel =
+        rawTypeLabel && rawTypeLabel.trim().length > 0 ? rawTypeLabel : '—';
+
+      return {
+        id: summary.config.id,
+        label: summary.label,
+        connectorName,
+        connectorTypeLabel: typeLabel,
+        status: summary.status,
+      };
+    });
+  }, [connectorSummaries]);
+
   const connectorLabelsById = useMemo(() => {
     const labels: Record<string, string> = {};
     formConfig.connectors.forEach((connector, index) => {
@@ -1268,7 +1283,7 @@ export const CustomizableFormBuilder = ({
     return labels;
   }, [formConfig.connectors]);
 
-  const handleTestSubmission = useCallback(async () => {
+  const executeConnectorsNow = useCallback(async () => {
     if (formConfig.connectors.length === 0) {
       toasts.addWarning({
         title: i18n.translate('customizableForm.builder.executeConnectors.noConnectorsTitle', {
@@ -1294,7 +1309,8 @@ export const CustomizableFormBuilder = ({
       const errors = results.filter((result) => result.status === 'error');
 
       successes.forEach((result) => {
-        const label = connectorLabelsById[result.connector.id] ?? result.connector.label ?? result.connector.id;
+        const label =
+          connectorLabelsById[result.connector.id] ?? result.connector.label ?? result.connector.id;
         toasts.addSuccess({
           title: i18n.translate('customizableForm.builder.executeConnectors.successTitle', {
             defaultMessage: 'Connector executed',
@@ -1307,7 +1323,8 @@ export const CustomizableFormBuilder = ({
       });
 
       errors.forEach((result) => {
-        const label = connectorLabelsById[result.connector.id] ?? result.connector.label ?? result.connector.id;
+        const label =
+          connectorLabelsById[result.connector.id] ?? result.connector.label ?? result.connector.id;
         toasts.addDanger({
           title: i18n.translate('customizableForm.builder.executeConnectors.errorTitle', {
             defaultMessage: 'Connector execution failed',
@@ -1337,6 +1354,36 @@ export const CustomizableFormBuilder = ({
     renderedPayloads,
     toasts,
   ]);
+
+  const handleTestSubmission = useCallback(() => {
+    if (formConfig.connectors.length === 0) {
+      toasts.addWarning({
+        title: i18n.translate('customizableForm.builder.executeConnectors.noConnectorsTitle', {
+          defaultMessage: 'No connectors configured',
+        }),
+        text: i18n.translate('customizableForm.builder.executeConnectors.noConnectorsBody', {
+          defaultMessage: 'Add at least one connector before submitting the form.',
+        }),
+      });
+      return;
+    }
+
+    if (formConfig.requireConfirmationOnSubmit) {
+      setIsSubmitConfirmationVisible(true);
+      return;
+    }
+
+    executeConnectorsNow();
+  }, [executeConnectorsNow, formConfig.connectors, formConfig.requireConfirmationOnSubmit, toasts]);
+
+  const handleConfirmConnectorExecution = useCallback(() => {
+    setIsSubmitConfirmationVisible(false);
+    executeConnectorsNow();
+  }, [executeConnectorsNow]);
+
+  const handleCancelConnectorExecution = useCallback(() => {
+    setIsSubmitConfirmationVisible(false);
+  }, []);
 
   if (isInitialLoading) {
     return (
@@ -1386,76 +1433,111 @@ export const CustomizableFormBuilder = ({
   }
 
   return (
-    <div
-      style={{
-        backgroundColor: '#f6f9fc',
-        minHeight: '100vh',
-        padding: '24px 32px 32px',
-        boxSizing: 'border-box',
-      }}
-    >
-      <EuiFlexGroup gutterSize="m" alignItems="stretch">
-        <EuiFlexItem grow={4}>
-          <EuiFlexGroup direction="column" gutterSize="m">
-            <EuiFlexItem grow={false}>
-            <PreviewCard
-              config={formConfig}
-              fieldValues={fieldValues}
-              onFieldValueChange={handleFieldValueChange}
-              isSubmitDisabled={isSubmitDisabled}
-              onSubmit={handleTestSubmission}
-              validationByFieldId={fieldValidationById}
-              isSubmitting={isExecutingConnectors}
-            />
-            </EuiFlexItem>
-            <EuiFlexItem grow={false}>
-              <InfoPanel
-                connectorSummaries={connectorSummaries}
-                renderedPayloads={renderedPayloads}
-                templateValidationByConnector={templateValidationByConnector}
-              />
-            </EuiFlexItem>
-          </EuiFlexGroup>
-        </EuiFlexItem>
+    <>
+      {isSubmitConfirmationVisible ? (
+        <EuiOverlayMask>
+          <EuiConfirmModal
+            title={i18n.translate('customizableForm.builder.executeConfirmModalTitle', {
+              defaultMessage: 'Execute connectors?',
+            })}
+            onCancel={handleCancelConnectorExecution}
+            onConfirm={handleConfirmConnectorExecution}
+            cancelButtonText={i18n.translate('customizableForm.builder.executeConfirmModalCancel', {
+              defaultMessage: 'Cancel',
+            })}
+            confirmButtonText={i18n.translate('customizableForm.builder.executeConfirmModalConfirm', {
+              defaultMessage: 'Execute connectors',
+            })}
+            defaultFocusedButton="confirm"
+          >
+            <EuiText size="s">
+              <p>
+                {i18n.translate('customizableForm.builder.executeConfirmModalBody', {
+                  defaultMessage: 'You are about to trigger the following connectors.',
+                })}
+              </p>
+            </EuiText>
+            <EuiSpacer size="m" />
+            <ConnectorSummaryTable items={connectorSummaryItems} />
+          </EuiConfirmModal>
+        </EuiOverlayMask>
+      ) : null}
 
-        <EuiFlexItem grow={2}>
-          <ConfigurationPanel
-            config={formConfig}
-            onTitleChange={(v) => updateConfig({ title: v })}
-            onDescriptionChange={(v) => updateConfig({ description: v })}
-            onShowTitleChange={(show) => updateConfig({ showTitle: show })}
-            onShowDescriptionChange={(show) => updateConfig({ showDescription: show })}
-            onLayoutColumnsChange={(cols) => updateConfig({ layoutColumns: cols })}
-            onConnectorTypeChange={handleConnectorTypeChange}
-            onConnectorChange={handleConnectorChange}
-            onConnectorLabelChange={handleConnectorLabelChange}
-            onConnectorTemplateChange={handleConnectorTemplateChange}
-            onConnectorAdd={addConnector}
-            onConnectorRemove={removeConnector}
-            onFieldChange={updateField}
-            onFieldRemove={removeField}
-            onAddField={addField}
-            onFieldReorder={handleFieldReorder}
-            variableNameValidationById={variableNameValidationById}
-            hasInvalidVariableNames={hasInvalidVariableNames}
-            connectorTypeOptions={connectorTypeOptions}
-            connectorTypes={connectorTypes}
-            connectorsByType={connectorsByType}
-            templateValidationByConnector={templateValidationByConnector}
-            connectorStatusById={connectorStatusById}
-            connectorSelectionState={connectorSelectionState}
-            isLoadingConnectorTypes={isLoadingConnectorTypes}
-            isLoadingConnectors={isLoadingConnectors}
-            connectorTypesError={connectorTypesError}
-            connectorsError={connectorsError}
-            hasEmptyConnectorLabels={hasEmptyConnectorLabels}
-            isSaveDisabled={isSaveDisabled}
-            isSaving={isSaving}
-            onSaveRequest={handleSaveVisualizationRequest}
-          />
-        </EuiFlexItem>
-      </EuiFlexGroup>
-    </div>
+      <div
+        style={{
+          backgroundColor: '#f6f9fc',
+          minHeight: '100vh',
+          padding: '24px 32px 32px',
+          boxSizing: 'border-box',
+        }}
+      >
+        <EuiFlexGroup gutterSize="m" alignItems="stretch">
+          <EuiFlexItem grow={4}>
+            <EuiFlexGroup direction="column" gutterSize="m">
+              <EuiFlexItem grow={false}>
+                <PreviewCard
+                  config={formConfig}
+                  fieldValues={fieldValues}
+                  onFieldValueChange={handleFieldValueChange}
+                  isSubmitDisabled={isSubmitDisabled}
+                  onSubmit={handleTestSubmission}
+                  validationByFieldId={fieldValidationById}
+                  isSubmitting={isExecutingConnectors}
+                />
+              </EuiFlexItem>
+              <EuiFlexItem grow={false}>
+                <InfoPanel
+                  connectorSummaries={connectorSummaries}
+                  connectorSummaryItems={connectorSummaryItems}
+                  renderedPayloads={renderedPayloads}
+                  templateValidationByConnector={templateValidationByConnector}
+                />
+              </EuiFlexItem>
+            </EuiFlexGroup>
+          </EuiFlexItem>
+
+          <EuiFlexItem grow={2}>
+            <ConfigurationPanel
+              config={formConfig}
+              onTitleChange={(v) => updateConfig({ title: v })}
+              onDescriptionChange={(v) => updateConfig({ description: v })}
+              onShowTitleChange={(show) => updateConfig({ showTitle: show })}
+              onShowDescriptionChange={(show) => updateConfig({ showDescription: show })}
+              onLayoutColumnsChange={(cols) => updateConfig({ layoutColumns: cols })}
+              onRequireConfirmationChange={(value) =>
+                updateConfig({ requireConfirmationOnSubmit: value })
+              }
+              onConnectorTypeChange={handleConnectorTypeChange}
+              onConnectorChange={handleConnectorChange}
+              onConnectorLabelChange={handleConnectorLabelChange}
+              onConnectorTemplateChange={handleConnectorTemplateChange}
+              onConnectorAdd={addConnector}
+              onConnectorRemove={removeConnector}
+              onFieldChange={updateField}
+              onFieldRemove={removeField}
+              onAddField={addField}
+              onFieldReorder={handleFieldReorder}
+              variableNameValidationById={variableNameValidationById}
+              hasInvalidVariableNames={hasInvalidVariableNames}
+              connectorTypeOptions={connectorTypeOptions}
+              connectorTypes={connectorTypes}
+              connectorsByType={connectorsByType}
+              templateValidationByConnector={templateValidationByConnector}
+              connectorStatusById={connectorStatusById}
+              connectorSelectionState={connectorSelectionState}
+              isLoadingConnectorTypes={isLoadingConnectorTypes}
+              isLoadingConnectors={isLoadingConnectors}
+              connectorTypesError={connectorTypesError}
+              connectorsError={connectorsError}
+              hasEmptyConnectorLabels={hasEmptyConnectorLabels}
+              isSaveDisabled={isSaveDisabled}
+              isSaving={isSaving}
+              onSaveRequest={handleSaveVisualizationRequest}
+            />
+          </EuiFlexItem>
+        </EuiFlexGroup>
+      </div>
+    </>
   );
 };
 
@@ -1466,6 +1548,7 @@ interface ConfigurationPanelProps {
   onShowTitleChange: (value: boolean) => void;
   onShowDescriptionChange: (value: boolean) => void;
   onLayoutColumnsChange: (value: number) => void;
+  onRequireConfirmationChange: (value: boolean) => void;
   onConnectorTypeChange: (connectorConfigId: string, value: string) => void;
   onConnectorChange: (connectorConfigId: string, value: string) => void;
   onConnectorLabelChange: (connectorConfigId: string, value: string) => void;
@@ -1513,6 +1596,7 @@ const ConfigurationPanel = ({
   onAddField,
   onFieldReorder,
   onLayoutColumnsChange,
+  onRequireConfirmationChange,
   variableNameValidationById,
   hasInvalidVariableNames,
   onSaveRequest,
@@ -1643,41 +1727,58 @@ const ConfigurationPanel = ({
               aria-label={i18n.translate('customizableForm.builder.formDescriptionAria', {
                 defaultMessage: 'Form description',
               })}
+          />
+        </EuiFormRow>
+
+          <EuiFormRow
+            label={i18n.translate('customizableForm.builder.layoutColumnsLabel', {
+              defaultMessage: 'Preview columns',
+            })}
+            helpText={i18n.translate('customizableForm.builder.layoutColumnsHelpText', {
+              defaultMessage:
+                'Select between {min} and {max} columns. Extra fields wrap onto the next row.',
+              values: {
+                min: MIN_LAYOUT_COLUMNS,
+                max: MAX_LAYOUT_COLUMNS,
+              },
+            })}
+          >
+            <EuiFieldNumber
+              min={MIN_LAYOUT_COLUMNS}
+              max={MAX_LAYOUT_COLUMNS}
+              step={1}
+              value={config.layoutColumns}
+              onChange={(event) => {
+                const value = Number(event.target.value);
+                if (Number.isFinite(value)) {
+                  const normalized = Math.min(
+                    MAX_LAYOUT_COLUMNS,
+                    Math.max(MIN_LAYOUT_COLUMNS, Math.trunc(value))
+                  );
+                  onLayoutColumnsChange(normalized);
+                }
+              }}
+              fullWidth
             />
           </EuiFormRow>
 
-        <EuiFormRow
-          label={i18n.translate('customizableForm.builder.layoutColumnsLabel', {
-            defaultMessage: 'Preview columns',
-          })}
-          helpText={i18n.translate('customizableForm.builder.layoutColumnsHelpText', {
-            defaultMessage: 'Select between {min} and {max} columns. Extra fields wrap onto the next row.',
-            values: {
-              min: MIN_LAYOUT_COLUMNS,
-              max: MAX_LAYOUT_COLUMNS,
-            },
-          })}
-        >
-          <EuiFieldNumber
-            min={MIN_LAYOUT_COLUMNS}
-            max={MAX_LAYOUT_COLUMNS}
-            step={1}
-            value={config.layoutColumns}
-            onChange={(event) => {
-              const value = Number(event.target.value);
-              if (Number.isFinite(value)) {
-                const normalized = Math.min(
-                  MAX_LAYOUT_COLUMNS,
-                  Math.max(MIN_LAYOUT_COLUMNS, Math.trunc(value))
-                );
-                onLayoutColumnsChange(normalized);
-              }
-            }}
-            fullWidth
-          />
-        </EuiFormRow>
-      </EuiForm>
-    ) : null}
+          <EuiFormRow
+            label={i18n.translate('customizableForm.builder.requireConfirmationLabel', {
+              defaultMessage: 'Submission confirmation',
+            })}
+            display="columnCompressed"
+            hasChildLabel={false}
+          >
+            <EuiSwitch
+              label={i18n.translate('customizableForm.builder.requireConfirmationSwitch', {
+                defaultMessage: 'Ask for confirmation before executing connectors',
+              })}
+              checked={config.requireConfirmationOnSubmit}
+              onChange={(event) => onRequireConfirmationChange(event.target.checked)}
+            />
+          </EuiFormRow>
+        </EuiForm>
+      ) : null}
 
       {activeTab === 'connectors' ? (
         <>
@@ -2413,11 +2514,17 @@ interface InfoPanelProps {
     connector: ActionConnector & { actionTypeId: SupportedConnectorTypeId } | null;
     status: ConnectorStatus;
   }>;
+  connectorSummaryItems: ConnectorSummaryItem[];
   renderedPayloads: Record<string, string>;
   templateValidationByConnector: Record<string, { missing: string[]; unused: Array<{ key: string; label: string }> }>;
 }
 
-const InfoPanel = ({ connectorSummaries, renderedPayloads, templateValidationByConnector }: InfoPanelProps) => {
+const InfoPanel = ({
+  connectorSummaries,
+  connectorSummaryItems,
+  renderedPayloads,
+  templateValidationByConnector,
+}: InfoPanelProps) => {
   const [activePayloadId, setActivePayloadId] = useState<string | null>(
     connectorSummaries[0]?.config.id ?? null
   );
@@ -2468,89 +2575,7 @@ const InfoPanel = ({ connectorSummaries, renderedPayloads, templateValidationByC
             })}
           </EuiText>
         ) : (
-          <>
-            <div
-              css={[
-                connectorSummaryRowBaseStyles,
-                {
-                  backgroundColor: '#ffffff',
-                  marginBottom: connectorSummaries.length > 0 ? 6 : 0,
-                },
-              ]}
-            >
-              <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false}>
-                <EuiFlexItem grow={1}>
-                  <EuiText size="xs" color="subdued" css={connectorSummaryHeaderTextStyles}>
-                    <strong>
-                      {i18n.translate('customizableForm.builder.infoPanel.labelHeader', {
-                        defaultMessage: 'Label',
-                      })}
-                    </strong>
-                  </EuiText>
-                </EuiFlexItem>
-                <EuiFlexItem grow={1}>
-                  <EuiText size="xs" color="subdued" css={connectorSummaryHeaderTextStyles}>
-                    <strong>
-                      {i18n.translate('customizableForm.builder.infoPanel.connectorHeader', {
-                        defaultMessage: 'Connector',
-                      })}
-                    </strong>
-                  </EuiText>
-                </EuiFlexItem>
-                <EuiFlexItem grow={1}>
-                  <EuiText size="xs" color="subdued" css={connectorSummaryHeaderTextStyles}>
-                    <strong>
-                      {i18n.translate('customizableForm.builder.infoPanel.typeHeader', {
-                        defaultMessage: 'Type',
-                      })}
-                    </strong>
-                  </EuiText>
-                </EuiFlexItem>
-              </EuiFlexGroup>
-            </div>
-
-            {connectorSummaries.map(({ config, connector, type, label, status }, index) => {
-              const emphasizeError = status.hasError || status.hasTemplateError;
-              const emphasizeWarning = !emphasizeError && (status.hasWarning || status.hasTemplateWarning);
-
-              return (
-              <div
-                key={`connector-summary-${config.id}`}
-                css={[
-                  connectorSummaryRowBaseStyles,
-                  {
-                    backgroundColor: index % 2 === 0 ? '#ffffff' : '#f7fbff',
-                    marginBottom: index < connectorSummaries.length - 1 ? 6 : 0,
-                  },
-                ]}
-              >
-                <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false}>
-                  <EuiFlexItem grow={1}>
-                    <EuiText size="s">
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        {emphasizeError ? <EuiIcon type="alert" color="danger" size="s" /> : null}
-                        {emphasizeWarning ? <EuiIcon type="warning" color="warning" size="s" /> : null}
-                        <span>{label}</span>
-                      </span>
-                    </EuiText>
-                  </EuiFlexItem>
-                  <EuiFlexItem grow={1}>
-                    <EuiText size="s">
-                      {connector?.name ??
-                        i18n.translate('customizableForm.builder.infoPanel.connectorFallback', {
-                          defaultMessage: 'Unnamed connector {index}',
-                          values: { index: index + 1 },
-                        })}
-                    </EuiText>
-                  </EuiFlexItem>
-                  <EuiFlexItem grow={1}>
-                    <EuiText size="s">{type?.name ?? connector?.actionTypeId ?? '—'}</EuiText>
-                  </EuiFlexItem>
-                </EuiFlexGroup>
-              </div>
-            );
-            })}
-          </>
+          <ConnectorSummaryTable items={connectorSummaryItems} />
         )}
       </section>
 
