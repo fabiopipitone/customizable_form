@@ -28,6 +28,9 @@ const previewContainerStyles = css`
 `;
 
 const GRID_GAP = 16;
+const MIN_LAYOUT_COLUMNS = 1;
+const MAX_LAYOUT_COLUMNS = 12;
+const DEFAULT_LAYOUT_COLUMNS = 3;
 
 const getPreviewGridStyles = () => css`
   display: flex;
@@ -100,14 +103,18 @@ export const CustomizableFormPreview = ({
   onSubmit,
 }: CustomizableFormPreviewProps) => {
   const hasFields = config.fields.length > 0;
-  const rawColumns = typeof config.layoutColumns === 'number' ? config.layoutColumns : 1;
-  const columnCount = Math.min(Math.max(Math.round(rawColumns), 1), 3) as 1 | 2 | 3;
+  const rawColumns =
+    typeof config.layoutColumns === 'number' ? config.layoutColumns : DEFAULT_LAYOUT_COLUMNS;
+  const columnCount = Math.min(
+    MAX_LAYOUT_COLUMNS,
+    Math.max(MIN_LAYOUT_COLUMNS, Math.round(rawColumns) || MIN_LAYOUT_COLUMNS)
+  );
   const gridStyles = getPreviewGridStyles();
   const totalFields = config.fields.length;
   const remainder = totalFields > 0 ? totalFields % columnCount : 0;
   const lastRowCount =
     totalFields === 0
-      ? columnCount
+      ? 0
       : remainder === 0
       ? Math.min(columnCount, totalFields)
       : remainder;
@@ -154,7 +161,8 @@ export const CustomizableFormPreview = ({
           <div css={gridStyles}>
             {config.fields.map((field, index) => {
               const isInLastRow = totalFields > 0 && index >= lastRowStartIndex;
-              const columnsForRow = isInLastRow ? lastRowCount : columnCount;
+              const columnsInRowRaw = isInLastRow && lastRowCount > 0 ? lastRowCount : columnCount;
+              const columnsForRow = Math.max(MIN_LAYOUT_COLUMNS, columnsInRowRaw);
               return (
                 <div key={field.id} css={getCellStyles(columnsForRow)}>
                   <div css={cellContentStyles}>

@@ -1,5 +1,17 @@
 import type { FormConfig, FormConnectorConfig, FormFieldConfig } from './types';
 
+const MIN_LAYOUT_COLUMNS = 1;
+const MAX_LAYOUT_COLUMNS = 12;
+const DEFAULT_LAYOUT_COLUMNS = 3;
+
+const normalizeLayoutColumns = (value: number | undefined): number => {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return DEFAULT_LAYOUT_COLUMNS;
+  }
+  const rounded = Math.round(value);
+  return Math.min(MAX_LAYOUT_COLUMNS, Math.max(MIN_LAYOUT_COLUMNS, rounded));
+};
+
 export interface SerializedConnectorConfig {
   id: string;
   label: string;
@@ -51,7 +63,7 @@ export const serializeFormConfig = (config: FormConfig): SerializedFormConfig =>
   description: config.description,
   showTitle: config.showTitle,
   showDescription: config.showDescription,
-  layoutColumns: config.layoutColumns,
+  layoutColumns: normalizeLayoutColumns(config.layoutColumns),
   connectors: config.connectors.map(serializeConnector),
   fields: config.fields.map(serializeField),
 });
@@ -82,10 +94,7 @@ export const deserializeFormConfig = (serialized: SerializedFormConfig): FormCon
   description: serialized.description,
   showTitle: serialized.showTitle,
   showDescription: serialized.showDescription,
-  layoutColumns:
-    typeof serialized.layoutColumns === 'number' && serialized.layoutColumns >= 1 && serialized.layoutColumns <= 3
-      ? (Math.round(serialized.layoutColumns) as 1 | 2 | 3)
-      : 1,
+  layoutColumns: normalizeLayoutColumns(serialized.layoutColumns),
   connectors: serialized.connectors.map(deserializeConnector),
   fields: serialized.fields.map(deserializeField),
 });

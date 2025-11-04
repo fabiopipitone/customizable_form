@@ -17,12 +17,12 @@ import {
 import {
   EuiAccordion,
   EuiButton,
-  EuiButtonGroup,
   EuiButtonIcon,
   EuiCallOut,
   EuiCodeBlock,
   EuiEmptyPrompt,
   EuiFieldText,
+  EuiFieldNumber,
   EuiFlexGroup,
   EuiFlexItem,
   EuiForm,
@@ -122,6 +122,10 @@ const INITIAL_CONNECTORS: FormConnectorConfig[] = [
   },
 ];
 
+const MIN_LAYOUT_COLUMNS = 1;
+const MAX_LAYOUT_COLUMNS = 12;
+const DEFAULT_LAYOUT_COLUMNS = 3;
+
 const INITIAL_CONFIG: FormConfig = {
   title: i18n.translate('customizableForm.builder.initialTitle', {
     defaultMessage: 'New customizable form',
@@ -132,7 +136,7 @@ const INITIAL_CONFIG: FormConfig = {
   }),
   showTitle: true,
   showDescription: true,
-  layoutColumns: 1,
+  layoutColumns: DEFAULT_LAYOUT_COLUMNS,
   connectors: INITIAL_CONNECTORS,
   fields: [
     {
@@ -1282,7 +1286,7 @@ interface ConfigurationPanelProps {
   onDescriptionChange: (value: string) => void;
   onShowTitleChange: (value: boolean) => void;
   onShowDescriptionChange: (value: boolean) => void;
-  onLayoutColumnsChange: (value: 1 | 2 | 3) => void;
+  onLayoutColumnsChange: (value: number) => void;
   onConnectorTypeChange: (connectorConfigId: string, value: string) => void;
   onConnectorChange: (connectorConfigId: string, value: string) => void;
   onConnectorLabelChange: (connectorConfigId: string, value: string) => void;
@@ -1462,45 +1466,29 @@ const ConfigurationPanel = ({
             defaultMessage: 'Preview columns',
           })}
           helpText={i18n.translate('customizableForm.builder.layoutColumnsHelpText', {
-            defaultMessage: 'Choose how many columns the preview should use on wide screens.',
+            defaultMessage: 'Select between {min} and {max} columns. Extra fields wrap onto the next row.',
+            values: {
+              min: MIN_LAYOUT_COLUMNS,
+              max: MAX_LAYOUT_COLUMNS,
+            },
           })}
         >
-          <EuiButtonGroup
-            legend={i18n.translate('customizableForm.builder.layoutColumnsLegend', {
-              defaultMessage: 'Select the number of columns',
-            })}
-            options={[
-              {
-                id: 'layout-columns-1',
-                label: i18n.translate('customizableForm.builder.layoutColumns.optionOne', {
-                  defaultMessage: 'Single column',
-                }),
-              },
-              {
-                id: 'layout-columns-2',
-                label: i18n.translate('customizableForm.builder.layoutColumns.optionTwo', {
-                  defaultMessage: 'Two columns',
-                }),
-              },
-              {
-                id: 'layout-columns-3',
-                label: i18n.translate('customizableForm.builder.layoutColumns.optionThree', {
-                  defaultMessage: 'Three columns',
-                }),
-              },
-            ]}
-            idSelected={`layout-columns-${config.layoutColumns}`}
-            onChange={(optionId) => {
-              const map: Record<string, 1 | 2 | 3> = {
-                'layout-columns-1': 1,
-                'layout-columns-2': 2,
-                'layout-columns-3': 3,
-              };
-              const next = map[optionId] ?? config.layoutColumns;
-              onLayoutColumnsChange(next);
+          <EuiFieldNumber
+            min={MIN_LAYOUT_COLUMNS}
+            max={MAX_LAYOUT_COLUMNS}
+            step={1}
+            value={config.layoutColumns}
+            onChange={(event) => {
+              const value = Number(event.target.value);
+              if (Number.isFinite(value)) {
+                const normalized = Math.min(
+                  MAX_LAYOUT_COLUMNS,
+                  Math.max(MIN_LAYOUT_COLUMNS, Math.trunc(value))
+                );
+                onLayoutColumnsChange(normalized);
+              }
             }}
-            buttonSize="compressed"
-            isFullWidth
+            fullWidth
           />
         </EuiFormRow>
       </EuiForm>
