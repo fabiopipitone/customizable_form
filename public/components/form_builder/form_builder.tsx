@@ -20,6 +20,9 @@ import {
   EuiButtonIcon,
   EuiCallOut,
   EuiCodeBlock,
+  EuiDragDropContext,
+  EuiDraggable,
+  EuiDroppable,
   EuiEmptyPrompt,
   EuiFieldText,
   EuiFieldNumber,
@@ -219,6 +222,21 @@ const PanelHeader = ({ title }: { title: string }) => (
     </EuiTitle>
   </div>
 );
+
+const fieldDragHandleStyles = css`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  color: inherit;
+  border-radius: 4px;
+  padding: 2px;
+
+  &:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(0, 119, 204, 0.3);
+  }
+`;
 
 interface PreviewCardProps extends CustomizableFormPreviewProps {}
 
@@ -827,6 +845,32 @@ export const CustomizableFormBuilder = ({
     });
   }, []);
 
+  const handleFieldReorder = useCallback((sourceIndex: number, destinationIndex: number) => {
+    if (sourceIndex === destinationIndex) {
+      return;
+    }
+
+    setFormConfig((prev) => {
+      if (
+        sourceIndex < 0 ||
+        destinationIndex < 0 ||
+        sourceIndex >= prev.fields.length ||
+        destinationIndex >= prev.fields.length
+      ) {
+        return prev;
+      }
+
+      const nextFields = [...prev.fields];
+      const [moved] = nextFields.splice(sourceIndex, 1);
+      nextFields.splice(destinationIndex, 0, moved);
+
+      return {
+        ...prev,
+        fields: nextFields,
+      };
+    });
+  }, []);
+
   const connectorTypeOptions = useMemo(() => toConnectorTypeOptions(connectorTypes), [connectorTypes]);
 
   const connectorsByType = useMemo(() => {
@@ -1259,6 +1303,7 @@ export const CustomizableFormBuilder = ({
             onFieldChange={updateField}
             onFieldRemove={removeField}
             onAddField={addField}
+            onFieldReorder={handleFieldReorder}
             connectorTypeOptions={connectorTypeOptions}
             connectorTypes={connectorTypes}
             connectorsByType={connectorsByType}
@@ -1296,6 +1341,7 @@ interface ConfigurationPanelProps {
   onFieldChange: (fieldId: string, changes: Partial<FormFieldConfig>) => void;
   onFieldRemove: (fieldId: string) => void;
   onAddField: () => void;
+  onFieldReorder: (sourceIndex: number, destinationIndex: number) => void;
   onSaveRequest: () => void;
   connectorTypeOptions: Array<{ value: string; text: string }>;
   connectorTypes: Array<ActionType & { id: SupportedConnectorTypeId }>;
@@ -1329,6 +1375,7 @@ const ConfigurationPanel = ({
   onFieldChange,
   onFieldRemove,
   onAddField,
+  onFieldReorder,
   onLayoutColumnsChange,
   onSaveRequest,
   connectorTypeOptions,
@@ -1763,116 +1810,172 @@ const ConfigurationPanel = ({
 
           <EuiSpacer size="s" />
 
-          {config.fields.map((field, index) => (
-            <EuiAccordion
-              id={field.id}
-              key={field.id}
-              buttonContent={
-                field.label ||
-                i18n.translate('customizableForm.builder.fieldFallbackLabel', {
-                  defaultMessage: 'Field {number}',
-                  values: { number: index + 1 },
-                })
-              }
-              paddingSize="s"
-              initialIsOpen={index === 0}
-              extraAction={
-                <EuiToolTip
-                  content={i18n.translate('customizableForm.builder.removeFieldTooltip', {
-                    defaultMessage: 'Remove field',
+          <EuiDragDropContext
+            onDragEnd={({ source, destination }) => {
+              if (!destination) return;
+              onFieldReorder(source.index, destination.index);
+            }}
+          >
+            <EuiDroppable droppableId="customizableFormFields" direction="vertical">
+              {(droppableProvided) => (
+                <div ref={droppableProvided.innerRef} {...droppableProvided.droppableProps}>
+                  {config.fields.map((field, index) => {
+                    const accordionLabel =
+                      field.label ||
+                      i18n.translate('customizableForm.builder.fieldFallbackLabel', {
+                        defaultMessage: 'Field {number}',
+                        values: { number: index + 1 },
+                      });
+
+                    return (
+                      <EuiDraggable
+                        key={field.id}
+                        draggableId={`field-${field.id}`}
+                        index={index}
+                        customDragHandle
+                      >
+                        {(draggableProvided) => (
+                          <div
+                            ref={draggableProvided.innerRef}
+                            {...draggableProvided.draggableProps}
+                            style={{
+                              ...draggableProvided.draggableProps.style,
+                              marginBottom: index === config.fields.length - 1 ? 0 : 12,
+                            }}
+                          >
+                            <EuiAccordion
+                              id={field.id}
+                              buttonContent={
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <span
+                                    css={fieldDragHandleStyles}
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-label={i18n.translate(
+                                      'customizableForm.builder.reorderFieldAriaLabel',
+                                      {
+                                        defaultMessage: 'Drag to reorder field {label}',
+                                        values: { label: accordionLabel },
+                                      }
+                                    )}
+                                    {...draggableProvided.dragHandleProps}
+                                  >
+                                    <EuiIcon type="grab" size="m" />
+                                  </span>
+                                  <span>{accordionLabel}</span>
+                                </span>
+                              }
+                              paddingSize="s"
+                              initialIsOpen={index === 0}
+                              extraAction={
+                                <EuiToolTip
+                                  content={i18n.translate('customizableForm.builder.removeFieldTooltip', {
+                                    defaultMessage: 'Remove field',
+                                  })}
+                                >
+                                  <EuiButtonIcon
+                                    iconType="trash"
+                                    color="danger"
+                                    aria-label={i18n.translate(
+                                      'customizableForm.builder.removeFieldAriaLabel',
+                                      {
+                                        defaultMessage: 'Remove field {label}',
+                                        values: { label: field.label || index + 1 },
+                                      }
+                                    )}
+                                    onClick={() => onFieldRemove(field.id)}
+                                  />
+                                </EuiToolTip>
+                              }
+                            >
+                              <EuiSpacer size="s" />
+
+                              <EuiFormRow
+                                label={i18n.translate('customizableForm.builder.fieldLabelLabel', {
+                                  defaultMessage: 'Label',
+                                })}
+                              >
+                                <EuiFieldText
+                                  value={field.label}
+                                  onChange={(e) => onFieldChange(field.id, { label: e.target.value })}
+                                />
+                              </EuiFormRow>
+
+                              <EuiFormRow
+                                label={i18n.translate('customizableForm.builder.fieldKeyLabel', {
+                                  defaultMessage: 'Variable name',
+                                })}
+                                helpText={i18n.translate('customizableForm.builder.fieldKeyHelpText', {
+                                  defaultMessage: 'Used in the connector template as {example}.',
+                                  values: { example: '{{variable_name}}' },
+                                })}
+                              >
+                                <EuiFieldText
+                                  value={field.key}
+                                  onChange={(e) => onFieldChange(field.id, { key: e.target.value })}
+                                />
+                              </EuiFormRow>
+
+                              <EuiFormRow
+                                label={i18n.translate('customizableForm.builder.fieldPlaceholderLabel', {
+                                  defaultMessage: 'Placeholder',
+                                })}
+                              >
+                                <EuiFieldText
+                                  value={field.placeholder ?? ''}
+                                  onChange={(e) => onFieldChange(field.id, { placeholder: e.target.value })}
+                                />
+                              </EuiFormRow>
+
+                              <EuiFormRow
+                                label={i18n.translate('customizableForm.builder.fieldTypeLabel', {
+                                  defaultMessage: 'Input type',
+                                })}
+                              >
+                                <EuiSelect
+                                  options={[
+                                    {
+                                      value: 'text',
+                                      text: i18n.translate('customizableForm.builder.fieldType.text', {
+                                        defaultMessage: 'Single line text',
+                                      }),
+                                    },
+                                    {
+                                      value: 'textarea',
+                                      text: i18n.translate('customizableForm.builder.fieldType.textarea', {
+                                        defaultMessage: 'Multiline text',
+                                      }),
+                                    },
+                                  ]}
+                                  value={field.type}
+                                  onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+                                    onFieldChange(field.id, { type: e.target.value as FormFieldType })
+                                  }
+                                />
+                              </EuiFormRow>
+
+                              <EuiFormRow display="columnCompressed">
+                                <EuiSwitch
+                                  label={i18n.translate('customizableForm.builder.fieldRequiredLabel', {
+                                    defaultMessage: 'Required',
+                                  })}
+                                  checked={field.required}
+                                  onChange={(e) => onFieldChange(field.id, { required: e.target.checked })}
+                                />
+                              </EuiFormRow>
+
+                              <EuiSpacer size="m" />
+                            </EuiAccordion>
+                          </div>
+                        )}
+                      </EuiDraggable>
+                    );
                   })}
-                >
-                  <EuiButtonIcon
-                    iconType="trash"
-                    color="danger"
-                    aria-label={i18n.translate('customizableForm.builder.removeFieldAriaLabel', {
-                      defaultMessage: 'Remove field {label}',
-                      values: { label: field.label || index + 1 },
-                    })}
-                    onClick={() => onFieldRemove(field.id)}
-                  />
-                </EuiToolTip>
-              }
-            >
-              <EuiSpacer size="s" />
-
-              <EuiFormRow
-                label={i18n.translate('customizableForm.builder.fieldLabelLabel', {
-                  defaultMessage: 'Label',
-                })}
-              >
-                <EuiFieldText
-                  value={field.label}
-                  onChange={(e) => onFieldChange(field.id, { label: e.target.value })}
-                />
-              </EuiFormRow>
-
-              <EuiFormRow
-                label={i18n.translate('customizableForm.builder.fieldKeyLabel', {
-                  defaultMessage: 'Variable name',
-                })}
-                helpText={i18n.translate('customizableForm.builder.fieldKeyHelpText', {
-                  defaultMessage: 'Used in the connector template as {example}.',
-                  values: { example: '{{variable_name}}' },
-                })}
-              >
-                <EuiFieldText
-                  value={field.key}
-                  onChange={(e) => onFieldChange(field.id, { key: e.target.value })}
-                />
-              </EuiFormRow>
-
-              <EuiFormRow
-                label={i18n.translate('customizableForm.builder.fieldPlaceholderLabel', {
-                  defaultMessage: 'Placeholder',
-                })}
-              >
-                <EuiFieldText
-                  value={field.placeholder ?? ''}
-                  onChange={(e) => onFieldChange(field.id, { placeholder: e.target.value })}
-                />
-              </EuiFormRow>
-
-              <EuiFormRow
-                label={i18n.translate('customizableForm.builder.fieldTypeLabel', {
-                  defaultMessage: 'Input type',
-                })}
-              >
-                <EuiSelect
-                  options={[
-                    {
-                      value: 'text',
-                      text: i18n.translate('customizableForm.builder.fieldType.text', {
-                        defaultMessage: 'Single line text',
-                      }),
-                    },
-                    {
-                      value: 'textarea',
-                      text: i18n.translate('customizableForm.builder.fieldType.textarea', {
-                        defaultMessage: 'Multiline text',
-                      }),
-                    },
-                  ]}
-                  value={field.type}
-                  onChange={(e: ChangeEvent<HTMLSelectElement>) =>
-                    onFieldChange(field.id, { type: e.target.value as FormFieldType })
-                  }
-                />
-              </EuiFormRow>
-
-              <EuiFormRow display="columnCompressed">
-                <EuiSwitch
-                  label={i18n.translate('customizableForm.builder.fieldRequiredLabel', {
-                    defaultMessage: 'Required',
-                  })}
-                  checked={field.required}
-                  onChange={(e) => onFieldChange(field.id, { required: e.target.checked })}
-                />
-              </EuiFormRow>
-
-              <EuiSpacer size="m" />
-            </EuiAccordion>
-          ))}
+                  {droppableProvided.placeholder}
+                </div>
+              )}
+            </EuiDroppable>
+          </EuiDragDropContext>
 
           <EuiSpacer size="s" />
 
