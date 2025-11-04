@@ -66,6 +66,11 @@ import {
   MIN_LAYOUT_COLUMNS,
 } from './constants';
 import {
+  validateVariableName,
+  VARIABLE_NAME_RULES,
+  type VariableNameValidationResult,
+} from './validation';
+import {
   CustomizableFormPreview,
   type CustomizableFormPreviewProps,
   getFieldValidationResult,
@@ -1028,9 +1033,22 @@ export const CustomizableFormBuilder = ({
     return map;
   }, [formConfig.fields, fieldValues]);
 
+  const variableNameValidationById = useMemo(() => {
+    const trimmedNames = formConfig.fields.map((field) => field.key.trim());
+    return formConfig.fields.reduce<Record<string, VariableNameValidationResult>>(
+      (acc, field) => {
+        acc[field.id] = validateVariableName({ value: field.key, existingNames: trimmedNames });
+        return acc;
+      },
+      {}
+    );
+  }, [formConfig.fields]);
+
   const hasFieldValidationWarnings = useMemo(
-    () => Object.values(fieldValidationById).some((result) => result.isOutOfRange),
-    [fieldValidationById]
+    () =>
+      Object.values(fieldValidationById).some((result) => result.isOutOfRange) ||
+      Object.values(variableNameValidationById).some((result) => !result.isValid),
+    [fieldValidationById, variableNameValidationById]
   );
 
   const isSubmitDisabled = useMemo(
@@ -1201,6 +1219,11 @@ export const CustomizableFormBuilder = ({
     );
   }, [application, formConfig, history, http, savedObjectAttributes, savedObjectId, toasts]);
 
+  const hasInvalidVariableNames = useMemo(
+    () => Object.values(variableNameValidationById).some((result) => !result.isValid),
+    [variableNameValidationById]
+  );
+
   const isSaveDisabled = useMemo(
     () =>
       hasEmptyConnectorLabels ||
@@ -1208,12 +1231,14 @@ export const CustomizableFormBuilder = ({
       formConfig.connectors.some(
         (connectorConfig) =>
           (templateValidationByConnector[connectorConfig.id]?.missing.length ?? 0) > 0
-      ),
+      ) ||
+      hasInvalidVariableNames,
     [
       formConfig.connectors,
       templateValidationByConnector,
       hasEmptyConnectorLabels,
       hasInvalidConnectorSelections,
+      hasInvalidVariableNames,
     ]
   );
 
@@ -1343,8 +1368,10 @@ export const CustomizableFormBuilder = ({
             onFieldChange={updateField}
             onFieldRemove={removeField}
             onAddField={addField}
-            onFieldReorder={handleFieldReorder}
-            connectorTypeOptions={connectorTypeOptions}
+          onFieldReorder={handleFieldReorder}
+          variableNameValidationById={variableNameValidationById}
+          hasInvalidVariableNames={hasInvalidVariableNames}
+          connectorTypeOptions={connectorTypeOptions}
             connectorTypes={connectorTypes}
             connectorsByType={connectorsByType}
             templateValidationByConnector={templateValidationByConnector}
@@ -1382,6 +1409,8 @@ interface ConfigurationPanelProps {
   onFieldRemove: (fieldId: string) => void;
   onAddField: () => void;
   onFieldReorder: (sourceIndex: number, destinationIndex: number) => void;
+  variableNameValidationById: Record<string, VariableNameValidationResult>;
+  hasInvalidVariableNames: boolean;
   onSaveRequest: () => void;
   connectorTypeOptions: Array<{ value: string; text: string }>;
   connectorTypes: Array<ActionType & { id: SupportedConnectorTypeId }>;
@@ -1417,6 +1446,8 @@ const ConfigurationPanel = ({
   onAddField,
   onFieldReorder,
   onLayoutColumnsChange,
+  variableNameValidationById,
+  hasInvalidVariableNames,
   onSaveRequest,
   connectorTypeOptions,
   connectorTypes,
@@ -1867,6 +1898,9 @@ const ConfigurationPanel = ({
                         values: { number: index + 1 },
                       });
 
+                    const variableValidation = variableNameValidationById[field.id] ?? {
+                      isValid: true,
+                    };
                     const sizeDefaults = getDefaultSizeForDataType(field.dataType);
                     const sizeBounds = field.dataType === 'number' ? DEFAULT_NUMBER_SIZE : DEFAULT_STRING_SIZE;
                     const currentSize = field.size ?? sizeDefaults;
@@ -1963,9 +1997,20 @@ const ConfigurationPanel = ({
                                   defaultMessage: 'Variable name',
                                 })}
                                 helpText={i18n.translate('customizableForm.builder.fieldKeyHelpText', {
-                                  defaultMessage: 'Used in the connector template as {example}.',
-                                  values: { example: '{{variable_name}}' },
+                                  defaultMessage:
+                                    'Used in the connector template as {example}. Must be {min}-{max} characters, start with a letter or underscore, and contain only letters, digits, underscores, or hyphens.',
+                                  values: {
+                                    example: '{{variable_name}}',
+                                    min: VARIABLE_NAME_RULES.MIN_LENGTH,
+                                    max: VARIABLE_NAME_RULES.MAX_LENGTH,
+                                  },
                                 })}
+                                isInvalid={Boolean(variableValidation && !variableValidation.isValid)}
+                                error={
+                                  variableValidation && !variableValidation.isValid
+                                    ? variableValidation.message
+                                    : undefined
+                                }
                               >
                                 <EuiFieldText
                                   value={field.key}
@@ -2118,6 +2163,31 @@ const ConfigurationPanel = ({
               defaultMessage: 'Add field',
             })}
           </EuiButton>
+
+          {hasInvalidVariableNames ? (
+            <>
+              <EuiSpacer size="s" />
+              <EuiCallOut
+                color="danger"
+                iconType="alert"
+                size="s"
+                title={i18n.translate('customizableForm.builder.invalidVariableNamesTitle', {
+                  defaultMessage: 'Invalid variable names',
+                })}
+              >
+                <p>
+                  {i18n.translate('customizableForm.builder.invalidVariableNamesBody', {
+                    defaultMessage:
+                      'Ensure each variable name is unique, between {min} and {max} characters, and matches the allowed pattern.',
+                    values: {
+                      min: VARIABLE_NAME_RULES.MIN_LENGTH,
+                      max: VARIABLE_NAME_RULES.MAX_LENGTH,
+                    },
+                  })}
+                </p>
+              </EuiCallOut>
+            </>
+          ) : null}
         </>
       ) : null}
 
