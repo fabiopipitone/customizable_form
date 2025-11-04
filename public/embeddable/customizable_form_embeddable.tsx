@@ -9,7 +9,11 @@ import { initializeTitleManager, titleComparators } from '@kbn/presentation-publ
 
 import { CUSTOMIZABLE_FORM_EMBEDDABLE_TYPE, PLUGIN_ID, PLUGIN_NAME } from '../../common';
 import type { FormConfig } from '../components/form_builder/types';
-import { CustomizableFormPreview } from '../components/form_builder/preview';
+import {
+  CustomizableFormPreview,
+  getFieldValidationResult,
+  type FieldValidationResult,
+} from '../components/form_builder/preview';
 import {
   resolveCustomizableForm,
   getDocumentFromResolveResponse,
@@ -21,6 +25,8 @@ import type {
   CustomizableFormEmbeddableApi,
   CustomizableFormEmbeddableSerializedState,
 } from './types';
+import { executeFormConnectors } from '../services/execute_connectors';
+import { validateVariableName } from '../components/form_builder/validation';
 
 const buildInitialFieldValues = (config: FormConfig): Record<string, string> =>
   config.fields.reduce<Record<string, string>>((acc, field) => {
@@ -158,6 +164,7 @@ export const getCustomizableFormEmbeddableFactory = ({
         const [fieldValues, setFieldValues] = useState<Record<string, string>>(
           initialDocument ? buildInitialFieldValues(initialDocument.formConfig) : {}
         );
+        const [isSubmitting, setIsSubmitting] = useState(false);
         const [isLoading, setIsLoading] = useState<boolean>(
           hasSavedObjectReference && !initialDocument
         );
@@ -240,29 +247,181 @@ export const getCustomizableFormEmbeddableFactory = ({
           });
         }, []);
 
+        const renderedPayloads = useMemo(() => {
+          if (!document) {
+            return {} as Record<string, string>;
+          }
+
+          const valueMap = document.formConfig.fields.reduce<Record<string, string>>((acc, field) => {
+            acc[field.key.trim()] = fieldValues[field.id] ?? '';
+            return acc;
+          }, {});
+
+          return document.formConfig.connectors.reduce<Record<string, string>>((acc, connectorConfig) => {
+            const rendered = connectorConfig.documentTemplate.replace(
+              /{{\s*([^{}\s]+)\s*}}/g,
+              (_, variable: string) => {
+                const trimmed = variable.trim();
+                return valueMap[trimmed] ?? '';
+              }
+            );
+            acc[connectorConfig.id] = rendered;
+            return acc;
+          }, {});
+        }, [document, fieldValues]);
+
+        const fieldValidationById = useMemo(() => {
+          if (!document) {
+            return {} as Record<string, FieldValidationResult>;
+          }
+          const map: Record<string, FieldValidationResult> = {};
+          document.formConfig.fields.forEach((field) => {
+            map[field.id] = getFieldValidationResult(field, fieldValues[field.id] ?? '');
+          });
+          return map;
+        }, [document, fieldValues]);
+
+        const hasFieldValidationWarnings = useMemo(
+          () => Object.values(fieldValidationById).some((result) => result.isOutOfRange),
+          [fieldValidationById]
+        );
+
+        const variableNameValidationById = useMemo(() => {
+          if (!document) {
+            return {} as Record<string, ReturnType<typeof validateVariableName>>;
+          }
+          const trimmedNames = document.formConfig.fields.map((field) => field.key.trim());
+          return document.formConfig.fields.reduce<Record<string, ReturnType<typeof validateVariableName>>>(
+            (acc, field) => {
+              acc[field.id] = validateVariableName({ value: field.key, existingNames: trimmedNames });
+              return acc;
+            },
+            {}
+          );
+        }, [document]);
+
+        const hasInvalidVariableNames = useMemo(
+          () =>
+            Object.values(variableNameValidationById).some((result) => !result.isValid),
+          [variableNameValidationById]
+        );
+
+        const connectorLabelsById = useMemo(() => {
+          if (!document) {
+            return {} as Record<string, string>;
+          }
+          const map: Record<string, string> = {};
+          document.formConfig.connectors.forEach((connector, index) => {
+            map[connector.id] =
+              (connector.label || '').trim() || i18n.translate('customizableForm.embeddable.connectorFallbackLabel', {
+                defaultMessage: 'Connector {number}',
+                values: { number: index + 1 },
+              });
+          });
+          return map;
+        }, [document]);
+
         const isSubmitDisabled = useMemo(() => {
           if (!document) {
             return true;
           }
-          return document.formConfig.fields.some((field) => {
+
+          const hasEmptyRequired = document.formConfig.fields.some((field) => {
             if (!field.required) {
               return false;
             }
             const value = fieldValues[field.id] ?? '';
             return value.trim().length === 0;
           });
-        }, [document, fieldValues]);
 
-        const handleSubmit = useCallback(() => {
-          if (!document) {
+          return (
+            hasEmptyRequired ||
+            hasFieldValidationWarnings ||
+            hasInvalidVariableNames ||
+            isSubmitting
+          );
+        }, [
+          document,
+          fieldValues,
+          hasFieldValidationWarnings,
+          hasInvalidVariableNames,
+          isSubmitting,
+        ]);
+
+        const handleSubmit = useCallback(async () => {
+          if (!document || isSubmitting) {
             return;
           }
-          // TODO: implement connector execution
-          console.log('Customizable form submitted', {
-            savedObjectId: currentSavedObjectId,
-            fieldValues,
-          });
-        }, [currentSavedObjectId, document, fieldValues]);
+
+          if (document.formConfig.connectors.length === 0) {
+            toasts.addWarning({
+              title: i18n.translate('customizableForm.embeddable.executeConnectors.noConnectorsTitle', {
+                defaultMessage: 'No connectors configured',
+              }),
+              text: i18n.translate('customizableForm.embeddable.executeConnectors.noConnectorsBody', {
+                defaultMessage: 'Add at least one connector in the form configuration to submit.',
+              }),
+            });
+            return;
+          }
+
+          setIsSubmitting(true);
+
+          try {
+            const results = await executeFormConnectors({
+              http,
+              connectors: document.formConfig.connectors,
+              renderedPayloads,
+            });
+
+            const successes = results.filter((result) => result.status === 'success');
+            const errors = results.filter((result) => result.status === 'error');
+
+            successes.forEach((result) => {
+              const label = connectorLabelsById[result.connector.id] ?? result.connector.label ?? result.connector.id;
+              toasts.addSuccess({
+                title: i18n.translate('customizableForm.embeddable.executeConnectors.successTitle', {
+                  defaultMessage: 'Connector executed',
+                }),
+                text: i18n.translate('customizableForm.embeddable.executeConnectors.successBody', {
+                  defaultMessage: '{label} executed successfully.',
+                  values: { label },
+                }),
+              });
+            });
+
+            errors.forEach((result) => {
+              const label = connectorLabelsById[result.connector.id] ?? result.connector.label ?? result.connector.id;
+              toasts.addDanger({
+                title: i18n.translate('customizableForm.embeddable.executeConnectors.errorTitle', {
+                  defaultMessage: 'Connector execution failed',
+                }),
+                text:
+                  result.message ??
+                  i18n.translate('customizableForm.embeddable.executeConnectors.errorBody', {
+                    defaultMessage: 'Unable to execute {label}.',
+                    values: { label },
+                  }),
+              });
+            });
+          } catch (error) {
+            toasts.addDanger({
+              title: i18n.translate('customizableForm.embeddable.executeConnectors.unexpectedErrorTitle', {
+                defaultMessage: 'Submit failed',
+              }),
+              text: getErrorMessage(error),
+            });
+          } finally {
+            setIsSubmitting(false);
+          }
+        }, [
+          document,
+          isSubmitting,
+          http,
+          renderedPayloads,
+          connectorLabelsById,
+          toasts,
+        ]);
 
         if (isLoading) {
           return (
@@ -325,11 +484,13 @@ export const getCustomizableFormEmbeddableFactory = ({
               onFieldValueChange={handleFieldValueChange}
               isSubmitDisabled={isSubmitDisabled}
               onSubmit={handleSubmit}
+              validationByFieldId={fieldValidationById}
+              isSubmitting={isSubmitting}
             />
             <EuiSpacer size="s" />
             <EuiText color="subdued" size="s">
               {i18n.translate('customizableForm.embeddable.connectorPlaceholder', {
-                defaultMessage: 'Form submissions are logged to the console in this preview.',
+                defaultMessage: 'Submitting executes the configured connectors.',
               })}
             </EuiText>
           </div>

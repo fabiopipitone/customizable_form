@@ -96,6 +96,7 @@ export interface CustomizableFormPreviewProps {
   isSubmitDisabled: boolean;
   onSubmit: () => void;
   validationByFieldId?: Record<string, FieldValidationResult>;
+  isSubmitting?: boolean;
 }
 
 export interface FieldValidationResult {
@@ -173,6 +174,7 @@ export const CustomizableFormPreview = ({
   isSubmitDisabled,
   onSubmit,
   validationByFieldId,
+  isSubmitting = false,
 }: CustomizableFormPreviewProps) => {
   const hasFields = config.fields.length > 0;
   const rawColumns =
@@ -305,7 +307,13 @@ export const CustomizableFormPreview = ({
 
           <EuiSpacer size="m" />
 
-          <EuiButton fill iconType="play" onClick={onSubmit} disabled={isSubmitDisabled}>
+          <EuiButton
+            fill
+            iconType="play"
+            onClick={onSubmit}
+            disabled={isSubmitDisabled || isSubmitting}
+            isLoading={isSubmitting}
+          >
             {i18n.translate('customizableForm.builder.previewSubmitButton', {
               defaultMessage: 'Submit',
             })}

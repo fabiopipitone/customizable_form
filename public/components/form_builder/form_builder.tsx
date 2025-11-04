@@ -76,6 +76,7 @@ import {
   getFieldValidationResult,
   type FieldValidationResult,
 } from './preview';
+import { executeFormConnectors } from '../../services/execute_connectors';
 import {
   createCustomizableForm,
   updateCustomizableForm,
@@ -268,6 +269,7 @@ const PreviewCard = ({
   isSubmitDisabled,
   onSubmit,
   validationByFieldId,
+  isSubmitting,
 }: PreviewCardProps) => (
   <EuiPanel paddingSize="m" hasShadow hasBorder={false}>
     <PanelHeader
@@ -282,6 +284,7 @@ const PreviewCard = ({
       isSubmitDisabled={isSubmitDisabled}
       onSubmit={onSubmit}
       validationByFieldId={validationByFieldId}
+      isSubmitting={isSubmitting}
     />
   </EuiPanel>
 );
@@ -337,6 +340,7 @@ export const CustomizableFormBuilder = ({
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(mode === 'edit');
   const [initialLoadError, setInitialLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isExecutingConnectors, setIsExecutingConnectors] = useState<boolean>(false);
 
   const [connectorTypes, setConnectorTypes] = useState<
     Array<ActionType & { id: SupportedConnectorTypeId }>
@@ -1256,21 +1260,83 @@ export const CustomizableFormBuilder = ({
     [formConfig.connectors, connectorTypes, connectors, connectorStatusById]
   );
 
-  const handleTestSubmission = useCallback(() => {
-    // TODO: wire connector execution
-    console.log('Test submission triggered', {
-      connectors: formConfig.connectors.map((connectorConfig) => ({
-        label: connectorConfig.label,
-        connectorTypeId: connectorConfig.connectorTypeId,
-        connectorId: connectorConfig.connectorId,
-        payload: renderedPayloads[connectorConfig.id] ?? '',
-      })),
-      fields: formConfig.fields.reduce<Record<string, string>>((acc, field) => {
-        acc[field.id] = fieldValues[field.id] ?? '';
-        return acc;
-      }, {}),
+  const connectorLabelsById = useMemo(() => {
+    const labels: Record<string, string> = {};
+    formConfig.connectors.forEach((connector, index) => {
+      labels[connector.id] = (connector.label || '').trim() || getConnectorFallbackLabel(index);
     });
-  }, [formConfig.connectors, formConfig.fields, fieldValues, renderedPayloads]);
+    return labels;
+  }, [formConfig.connectors]);
+
+  const handleTestSubmission = useCallback(async () => {
+    if (formConfig.connectors.length === 0) {
+      toasts.addWarning({
+        title: i18n.translate('customizableForm.builder.executeConnectors.noConnectorsTitle', {
+          defaultMessage: 'No connectors configured',
+        }),
+        text: i18n.translate('customizableForm.builder.executeConnectors.noConnectorsBody', {
+          defaultMessage: 'Add at least one connector before submitting the form.',
+        }),
+      });
+      return;
+    }
+
+    setIsExecutingConnectors(true);
+
+    try {
+      const results = await executeFormConnectors({
+        http,
+        connectors: formConfig.connectors,
+        renderedPayloads,
+      });
+
+      const successes = results.filter((result) => result.status === 'success');
+      const errors = results.filter((result) => result.status === 'error');
+
+      successes.forEach((result) => {
+        const label = connectorLabelsById[result.connector.id] ?? result.connector.label ?? result.connector.id;
+        toasts.addSuccess({
+          title: i18n.translate('customizableForm.builder.executeConnectors.successTitle', {
+            defaultMessage: 'Connector executed',
+          }),
+          text: i18n.translate('customizableForm.builder.executeConnectors.successBody', {
+            defaultMessage: '{label} executed successfully.',
+            values: { label },
+          }),
+        });
+      });
+
+      errors.forEach((result) => {
+        const label = connectorLabelsById[result.connector.id] ?? result.connector.label ?? result.connector.id;
+        toasts.addDanger({
+          title: i18n.translate('customizableForm.builder.executeConnectors.errorTitle', {
+            defaultMessage: 'Connector execution failed',
+          }),
+          text:
+            result.message ??
+            i18n.translate('customizableForm.builder.executeConnectors.errorBody', {
+              defaultMessage: 'Unable to execute {label}.',
+              values: { label },
+            }),
+        });
+      });
+    } catch (error) {
+      toasts.addDanger({
+        title: i18n.translate('customizableForm.builder.executeConnectors.unexpectedErrorTitle', {
+          defaultMessage: 'Submit failed',
+        }),
+        text: getErrorMessage(error),
+      });
+    } finally {
+      setIsExecutingConnectors(false);
+    }
+  }, [
+    formConfig.connectors,
+    connectorLabelsById,
+    http,
+    renderedPayloads,
+    toasts,
+  ]);
 
   if (isInitialLoading) {
     return (
@@ -1339,6 +1405,7 @@ export const CustomizableFormBuilder = ({
               isSubmitDisabled={isSubmitDisabled}
               onSubmit={handleTestSubmission}
               validationByFieldId={fieldValidationById}
+              isSubmitting={isExecutingConnectors}
             />
             </EuiFlexItem>
             <EuiFlexItem grow={false}>
@@ -1368,10 +1435,10 @@ export const CustomizableFormBuilder = ({
             onFieldChange={updateField}
             onFieldRemove={removeField}
             onAddField={addField}
-          onFieldReorder={handleFieldReorder}
-          variableNameValidationById={variableNameValidationById}
-          hasInvalidVariableNames={hasInvalidVariableNames}
-          connectorTypeOptions={connectorTypeOptions}
+            onFieldReorder={handleFieldReorder}
+            variableNameValidationById={variableNameValidationById}
+            hasInvalidVariableNames={hasInvalidVariableNames}
+            connectorTypeOptions={connectorTypeOptions}
             connectorTypes={connectorTypes}
             connectorsByType={connectorsByType}
             templateValidationByConnector={templateValidationByConnector}

@@ -10,4 +10,8 @@ export interface CustomizableFormEmbeddableSerializedState extends SerializedTit
 }
 
 export type CustomizableFormEmbeddableApi =
-  DefaultEmbeddableApi<CustomizableFormEmbeddableSerializedState>;
+  DefaultEmbeddableApi<CustomizableFormEmbeddableSerializedState> & {
+    onEdit: () => Promise<void>;
+    isEditingEnabled: () => boolean;
+    getTypeDisplayName: () => string;
+  };
