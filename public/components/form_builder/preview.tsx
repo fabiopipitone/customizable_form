@@ -22,26 +22,46 @@ const previewInputPlaceholderStyles = css`
 `;
 
 const previewContainerStyles = css`
-  padding: 0 0 16px 16px;
+  padding: 0 16px 16px;
 `;
 
 const GRID_GAP = 16;
 
-const getPreviewGridStyles = (columns: number) => css`
-  display: grid;
+const getPreviewGridStyles = () => css`
+  display: flex;
+  flex-wrap: wrap;
   gap: ${GRID_GAP}px;
-  grid-template-columns: repeat(${columns}, minmax(0, 1fr));
-
-  @media (max-width: 1199px) {
-    grid-template-columns: repeat(${Math.min(columns, 2)}, minmax(0, 1fr));
-  }
-
-  @media (max-width: 767px) {
-    grid-template-columns: 1fr;
-  }
+  width: 100%;
 `;
 
-const gridCellStyles = css`
+const getFlexBasis = (columnsInRow: number) => {
+  if (columnsInRow <= 1) {
+    return '100%';
+  }
+  const totalGap = (columnsInRow - 1) * GRID_GAP;
+  return `calc((100% - ${totalGap}px) / ${columnsInRow})`;
+};
+
+const getCellStyles = (columnsInRow: number) =>
+  css`
+    flex: 0 0 ${getFlexBasis(columnsInRow)};
+    max-width: ${getFlexBasis(columnsInRow)};
+    min-width: 0;
+    display: flex;
+
+    @media (max-width: 1199px) {
+      flex: 0 0 ${getFlexBasis(Math.min(columnsInRow, 2))};
+      max-width: ${getFlexBasis(Math.min(columnsInRow, 2))};
+    }
+
+    @media (max-width: 767px) {
+      flex: 0 0 100%;
+      max-width: 100%;
+    }
+  `;
+
+const cellContentStyles = css`
+  flex: 1 1 auto;
   min-width: 0;
 `;
 
@@ -63,7 +83,16 @@ export const CustomizableFormPreview = ({
   const hasFields = config.fields.length > 0;
   const rawColumns = typeof config.layoutColumns === 'number' ? config.layoutColumns : 1;
   const columnCount = Math.min(Math.max(Math.round(rawColumns), 1), 3) as 1 | 2 | 3;
-  const gridStyles = getPreviewGridStyles(columnCount);
+  const gridStyles = getPreviewGridStyles();
+  const totalFields = config.fields.length;
+  const remainder = totalFields > 0 ? totalFields % columnCount : 0;
+  const lastRowCount =
+    totalFields === 0
+      ? columnCount
+      : remainder === 0
+      ? Math.min(columnCount, totalFields)
+      : remainder;
+  const lastRowStartIndex = totalFields === 0 ? 0 : totalFields - lastRowCount;
   const title = config.title?.trim()
     ? config.title
     : i18n.translate('customizableForm.builder.previewFallbackTitle', {
@@ -97,44 +126,53 @@ export const CustomizableFormPreview = ({
       {showTitle || showDescription ? <EuiSpacer size="m" /> : <EuiSpacer size="s" />}
 
       {hasFields ? (
-        <EuiForm component="form" onSubmit={(event) => event.preventDefault()}>
+        <EuiForm component="form" fullWidth onSubmit={(event) => event.preventDefault()}>
           <div css={gridStyles}>
-            {config.fields.map((field) => (
-              <div key={field.id} css={gridCellStyles}>
-                <EuiFormRow
-                  label={field.label || field.key}
-                  labelAppend={
-                    <EuiText size="xs" color="subdued">
-                      {field.required
-                        ? i18n.translate('customizableForm.builder.previewFieldRequiredLabel', {
-                            defaultMessage: 'Required',
-                          })
-                        : i18n.translate('customizableForm.builder.previewFieldOptionalLabel', {
-                            defaultMessage: 'Optional',
-                          })}
-                    </EuiText>
-                  }
-                >
-                  {field.type === 'textarea' ? (
-                    <EuiTextArea
-                      placeholder={field.placeholder}
-                      aria-label={field.label || field.key}
-                      value={fieldValues[field.id] ?? ''}
-                      onChange={(event) => onFieldValueChange(field.id, event.target.value)}
-                      css={previewInputPlaceholderStyles}
-                    />
-                  ) : (
-                    <EuiFieldText
-                      placeholder={field.placeholder}
-                      aria-label={field.label || field.key}
-                      value={fieldValues[field.id] ?? ''}
-                      onChange={(event) => onFieldValueChange(field.id, event.target.value)}
-                      css={previewInputPlaceholderStyles}
-                    />
-                  )}
-                </EuiFormRow>
-              </div>
-            ))}
+            {config.fields.map((field, index) => {
+              const isInLastRow = totalFields > 0 && index >= lastRowStartIndex;
+              const columnsForRow = isInLastRow ? lastRowCount : columnCount;
+              return (
+                <div key={field.id} css={getCellStyles(columnsForRow)}>
+                  <div css={cellContentStyles}>
+                    <EuiFormRow
+                      fullWidth
+                      label={field.label || field.key}
+                      labelAppend={
+                        <EuiText size="xs" color="subdued">
+                          {field.required
+                            ? i18n.translate('customizableForm.builder.previewFieldRequiredLabel', {
+                                defaultMessage: 'Required',
+                              })
+                            : i18n.translate('customizableForm.builder.previewFieldOptionalLabel', {
+                                defaultMessage: 'Optional',
+                              })}
+                        </EuiText>
+                      }
+                    >
+                      {field.type === 'textarea' ? (
+                        <EuiTextArea
+                          fullWidth
+                          placeholder={field.placeholder}
+                          aria-label={field.label || field.key}
+                          value={fieldValues[field.id] ?? ''}
+                          onChange={(event) => onFieldValueChange(field.id, event.target.value)}
+                          css={previewInputPlaceholderStyles}
+                        />
+                      ) : (
+                        <EuiFieldText
+                          fullWidth
+                          placeholder={field.placeholder}
+                          aria-label={field.label || field.key}
+                          value={fieldValues[field.id] ?? ''}
+                          onChange={(event) => onFieldValueChange(field.id, event.target.value)}
+                          css={previewInputPlaceholderStyles}
+                        />
+                      )}
+                    </EuiFormRow>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           <EuiSpacer size="m" />

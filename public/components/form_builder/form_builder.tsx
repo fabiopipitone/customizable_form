@@ -1446,16 +1446,16 @@ const ConfigurationPanel = ({
               defaultMessage: 'Description',
             })}
           >
-          <EuiTextArea
-            resize="vertical"
-            value={config.description}
-            disabled={!config.showDescription}
-            onChange={(e) => onDescriptionChange(e.target.value)}
-            aria-label={i18n.translate('customizableForm.builder.formDescriptionAria', {
-              defaultMessage: 'Form description',
-            })}
-          />
-        </EuiFormRow>
+            <EuiTextArea
+              resize="vertical"
+              value={config.description}
+              disabled={!config.showDescription}
+              onChange={(e) => onDescriptionChange(e.target.value)}
+              aria-label={i18n.translate('customizableForm.builder.formDescriptionAria', {
+                defaultMessage: 'Form description',
+              })}
+            />
+          </EuiFormRow>
 
         <EuiFormRow
           label={i18n.translate('customizableForm.builder.layoutColumnsLabel', {
