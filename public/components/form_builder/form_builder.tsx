@@ -1449,6 +1449,8 @@ export const CustomizableFormBuilder = ({
               defaultMessage: 'Execute connectors',
             })}
             defaultFocusedButton="confirm"
+            maxWidth={640}
+            style={{ width: '640px' }}
           >
             <EuiText size="s">
               <p>

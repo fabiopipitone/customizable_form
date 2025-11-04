@@ -586,24 +586,26 @@ export const getCustomizableFormEmbeddableFactory = ({
           <>
             {isSubmitConfirmationVisible ? (
               <EuiOverlayMask>
-                <EuiConfirmModal
-                  title={i18n.translate('customizableForm.embeddable.executeConfirmModalTitle', {
-                    defaultMessage: 'Execute connectors?',
-                  })}
-                  onCancel={handleCancelConnectorExecution}
-                  onConfirm={handleConfirmConnectorExecution}
-                  cancelButtonText={i18n.translate('customizableForm.embeddable.executeConfirmModalCancel', {
-                    defaultMessage: 'Cancel',
-                  })}
-                  confirmButtonText={i18n.translate('customizableForm.embeddable.executeConfirmModalConfirm', {
-                    defaultMessage: 'Execute connectors',
-                  })}
-                  defaultFocusedButton="confirm"
-                >
-                  <EuiText size="s">
-                    <p>
-                      {i18n.translate('customizableForm.embeddable.executeConfirmModalBody', {
-                        defaultMessage: 'You are about to trigger the following connectors.',
+              <EuiConfirmModal
+                title={i18n.translate('customizableForm.embeddable.executeConfirmModalTitle', {
+                  defaultMessage: 'Execute connectors?',
+                })}
+                onCancel={handleCancelConnectorExecution}
+                onConfirm={handleConfirmConnectorExecution}
+                cancelButtonText={i18n.translate('customizableForm.embeddable.executeConfirmModalCancel', {
+                  defaultMessage: 'Cancel',
+                })}
+                confirmButtonText={i18n.translate('customizableForm.embeddable.executeConfirmModalConfirm', {
+                  defaultMessage: 'Execute connectors',
+                })}
+                defaultFocusedButton="confirm"
+                maxWidth={640}
+                style={{ width: '640px' }}
+              >
+                <EuiText size="s">
+                  <p>
+                    {i18n.translate('customizableForm.embeddable.executeConfirmModalBody', {
+                      defaultMessage: 'You are about to trigger the following connectors.',
                       })}
                     </p>
                   </EuiText>
