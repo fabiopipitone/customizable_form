@@ -1,4 +1,10 @@
 export type FormFieldType = 'text' | 'textarea';
+export type FormFieldDataType = 'string' | 'number' | 'boolean';
+
+export interface FormFieldSizeConstraint {
+  min: number;
+  max: number;
+}
 
 export interface FormFieldConfig {
   id: string;
@@ -7,6 +13,8 @@ export interface FormFieldConfig {
   placeholder?: string;
   type: FormFieldType;
   required: boolean;
+  dataType: FormFieldDataType;
+  size?: FormFieldSizeConstraint;
 }
 
 export type SupportedConnectorTypeId = '.index' | '.webhook';

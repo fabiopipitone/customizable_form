@@ -1,8 +1,17 @@
-import type { FormConfig, FormConnectorConfig, FormFieldConfig } from './types';
-
-const MIN_LAYOUT_COLUMNS = 1;
-const MAX_LAYOUT_COLUMNS = 12;
-const DEFAULT_LAYOUT_COLUMNS = 3;
+import type {
+  FormConfig,
+  FormConnectorConfig,
+  FormFieldConfig,
+  FormFieldDataType,
+  FormFieldSizeConstraint,
+} from './types';
+import {
+  DEFAULT_LAYOUT_COLUMNS,
+  DEFAULT_NUMBER_SIZE,
+  DEFAULT_STRING_SIZE,
+  MAX_LAYOUT_COLUMNS,
+  MIN_LAYOUT_COLUMNS,
+} from './constants';
 
 const normalizeLayoutColumns = (value: number | undefined): number => {
   if (typeof value !== 'number' || Number.isNaN(value)) {
@@ -10,6 +19,27 @@ const normalizeLayoutColumns = (value: number | undefined): number => {
   }
   const rounded = Math.round(value);
   return Math.min(MAX_LAYOUT_COLUMNS, Math.max(MIN_LAYOUT_COLUMNS, rounded));
+};
+
+const normalizeSize = (
+  dataType: FormFieldDataType,
+  size: FormFieldSizeConstraint | undefined
+): FormFieldSizeConstraint | undefined => {
+  if (dataType === 'boolean') {
+    return undefined;
+  }
+
+  const defaults = dataType === 'number' ? DEFAULT_NUMBER_SIZE : DEFAULT_STRING_SIZE;
+  const min = size?.min ?? defaults.min;
+  const max = size?.max ?? defaults.max;
+
+  const normalizedMin = Number.isFinite(min) ? min : defaults.min;
+  const normalizedMax = Number.isFinite(max) ? max : defaults.max;
+
+  const clampedMin = Math.max(0, Math.floor(normalizedMin));
+  const clampedMax = Math.max(clampedMin, Math.floor(normalizedMax));
+
+  return { min: clampedMin, max: clampedMax };
 };
 
 export interface SerializedConnectorConfig {
@@ -28,6 +58,8 @@ export interface SerializedFieldConfig {
   placeholder?: string;
   type: FormFieldConfig['type'];
   required: boolean;
+  dataType?: FormFieldDataType;
+  size?: FormFieldSizeConstraint;
 }
 
 export interface SerializedFormConfig {
@@ -56,6 +88,8 @@ const serializeField = (field: FormFieldConfig): SerializedFieldConfig => ({
   placeholder: field.placeholder,
   type: field.type,
   required: field.required,
+  dataType: field.dataType,
+  size: normalizeSize(field.dataType, field.size),
 });
 
 export const serializeFormConfig = (config: FormConfig): SerializedFormConfig => ({
@@ -80,14 +114,19 @@ const deserializeConnector = (connector: SerializedConnectorConfig): FormConnect
   isLabelAuto: connector.isLabelAuto ?? false,
 });
 
-const deserializeField = (field: SerializedFieldConfig): FormFieldConfig => ({
-  id: field.id,
-  key: field.key,
-  label: field.label,
-  placeholder: field.placeholder,
-  type: field.type,
-  required: field.required,
-});
+const deserializeField = (field: SerializedFieldConfig): FormFieldConfig => {
+  const dataType: FormFieldDataType = field.dataType ?? 'string';
+  return {
+    id: field.id,
+    key: field.key,
+    label: field.label,
+    placeholder: field.placeholder,
+    type: field.type,
+    required: field.required,
+    dataType,
+    size: normalizeSize(dataType, field.size),
+  };
+};
 
 export const deserializeFormConfig = (serialized: SerializedFormConfig): FormConfig => ({
   title: serialized.title,

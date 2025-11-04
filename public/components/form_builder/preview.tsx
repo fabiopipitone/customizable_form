@@ -13,7 +13,12 @@ import {
 } from '@elastic/eui';
 import { css } from '@emotion/react';
 
-import type { FormConfig } from './types';
+import type { FormConfig, FormFieldConfig } from './types';
+import {
+  DEFAULT_LAYOUT_COLUMNS,
+  MAX_LAYOUT_COLUMNS,
+  MIN_LAYOUT_COLUMNS,
+} from './constants';
 
 const previewInputPlaceholderStyles = css`
   ::placeholder {
@@ -28,9 +33,6 @@ const previewContainerStyles = css`
 `;
 
 const GRID_GAP = 16;
-const MIN_LAYOUT_COLUMNS = 1;
-const MAX_LAYOUT_COLUMNS = 12;
-const DEFAULT_LAYOUT_COLUMNS = 3;
 
 const getPreviewGridStyles = () => css`
   display: flex;
@@ -93,7 +95,76 @@ export interface CustomizableFormPreviewProps {
   onFieldValueChange: (fieldId: string, value: string) => void;
   isSubmitDisabled: boolean;
   onSubmit: () => void;
+  validationByFieldId?: Record<string, FieldValidationResult>;
 }
+
+export interface FieldValidationResult {
+  isOutOfRange: boolean;
+  message: string | null;
+}
+
+export const getFieldValidationResult = (
+  field: FormFieldConfig,
+  rawValue: string
+): FieldValidationResult => {
+  const value = rawValue ?? '';
+  const size = field.size;
+
+  if (!size || field.dataType === 'boolean') {
+    return { isOutOfRange: false, message: null };
+  }
+
+  if (field.dataType === 'string') {
+    if (value.length === 0) {
+      return { isOutOfRange: false, message: null };
+    }
+    if (value.length < size.min || value.length > size.max) {
+      return {
+        isOutOfRange: true,
+        message: i18n.translate('customizableForm.preview.validation.stringSize', {
+          defaultMessage: '{label} should contain between {min} and {max} characters.',
+          values: {
+            label: field.label || field.key,
+            min: size.min,
+            max: size.max,
+          },
+        }),
+      };
+    }
+    return { isOutOfRange: false, message: null };
+  }
+
+  if (value.trim().length === 0) {
+    return { isOutOfRange: false, message: null };
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return {
+      isOutOfRange: true,
+      message: i18n.translate('customizableForm.preview.validation.numberInvalid', {
+        defaultMessage: '{label} must be a valid number.',
+        values: { label: field.label || field.key },
+      }),
+    };
+  }
+
+  if (parsed < size.min || parsed > size.max) {
+    return {
+      isOutOfRange: true,
+      message: i18n.translate('customizableForm.preview.validation.numberSize', {
+        defaultMessage: '{label} should be between {min} and {max}.',
+        values: {
+          label: field.label || field.key,
+          min: size.min,
+          max: size.max,
+        },
+      }),
+    };
+  }
+
+  return { isOutOfRange: false, message: null };
+};
 
 export const CustomizableFormPreview = ({
   config,
@@ -101,6 +172,7 @@ export const CustomizableFormPreview = ({
   onFieldValueChange,
   isSubmitDisabled,
   onSubmit,
+  validationByFieldId,
 }: CustomizableFormPreviewProps) => {
   const hasFields = config.fields.length > 0;
   const rawColumns =
@@ -110,6 +182,16 @@ export const CustomizableFormPreview = ({
     Math.max(MIN_LAYOUT_COLUMNS, Math.round(rawColumns) || MIN_LAYOUT_COLUMNS)
   );
   const gridStyles = getPreviewGridStyles();
+  const computedValidationByFieldId = React.useMemo(() => {
+    if (validationByFieldId) {
+      return validationByFieldId;
+    }
+    const map: Record<string, FieldValidationResult> = {};
+    config.fields.forEach((field) => {
+      map[field.id] = getFieldValidationResult(field, fieldValues[field.id] ?? '');
+    });
+    return map;
+  }, [config.fields, fieldValues, validationByFieldId]);
   const totalFields = config.fields.length;
   const remainder = totalFields > 0 ? totalFields % columnCount : 0;
   const lastRowCount =
@@ -163,10 +245,23 @@ export const CustomizableFormPreview = ({
               const isInLastRow = totalFields > 0 && index >= lastRowStartIndex;
               const columnsInRowRaw = isInLastRow && lastRowCount > 0 ? lastRowCount : columnCount;
               const columnsForRow = Math.max(MIN_LAYOUT_COLUMNS, columnsInRowRaw);
+              const validation = computedValidationByFieldId[field.id] ?? {
+                isOutOfRange: false,
+                message: null,
+              };
+              const showWarning = validation.isOutOfRange && validation.message;
+
               return (
                 <div key={field.id} css={getCellStyles(columnsForRow)}>
                   <div css={cellContentStyles}>
                     <EuiFormRow
+                      helpText={
+                        showWarning ? (
+                          <EuiText size="xs" color="warning">
+                            {validation.message}
+                          </EuiText>
+                        ) : undefined
+                      }
                       css={formRowStyles}
                       fullWidth
                       label={field.label || field.key}

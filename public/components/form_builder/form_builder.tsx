@@ -26,6 +26,7 @@ import {
   EuiEmptyPrompt,
   EuiFieldText,
   EuiFieldNumber,
+  EuiDualRange,
   EuiFlexGroup,
   EuiFlexItem,
   EuiForm,
@@ -53,12 +54,22 @@ import {
   FormConfig,
   FormFieldConfig,
   FormFieldType,
+  FormFieldDataType,
   FormConnectorConfig,
   SupportedConnectorTypeId,
 } from './types';
 import {
+  DEFAULT_LAYOUT_COLUMNS,
+  DEFAULT_NUMBER_SIZE,
+  DEFAULT_STRING_SIZE,
+  MAX_LAYOUT_COLUMNS,
+  MIN_LAYOUT_COLUMNS,
+} from './constants';
+import {
   CustomizableFormPreview,
   type CustomizableFormPreviewProps,
+  getFieldValidationResult,
+  type FieldValidationResult,
 } from './preview';
 import {
   createCustomizableForm,
@@ -114,6 +125,9 @@ const getConnectorFallbackLabel = (index: number) =>
     values: { number: index + 1 },
   });
 
+const getDefaultSizeForDataType = (dataType: FormFieldDataType) =>
+  dataType === 'number' ? { ...DEFAULT_NUMBER_SIZE } : { ...DEFAULT_STRING_SIZE };
+
 const INITIAL_CONNECTORS: FormConnectorConfig[] = [
   {
     id: 'connector-1',
@@ -124,10 +138,6 @@ const INITIAL_CONNECTORS: FormConnectorConfig[] = [
     documentTemplate: DEFAULT_TEMPLATE,
   },
 ];
-
-const MIN_LAYOUT_COLUMNS = 1;
-const MAX_LAYOUT_COLUMNS = 12;
-const DEFAULT_LAYOUT_COLUMNS = 3;
 
 const INITIAL_CONFIG: FormConfig = {
   title: i18n.translate('customizableForm.builder.initialTitle', {
@@ -151,6 +161,8 @@ const INITIAL_CONFIG: FormConfig = {
       placeholder: 'e.g. e5f3-42aa',
       type: 'text',
       required: true,
+      dataType: 'string',
+      size: { ...DEFAULT_STRING_SIZE },
     },
     {
       id: 'field-2',
@@ -161,6 +173,8 @@ const INITIAL_CONFIG: FormConfig = {
       placeholder: 'YYYY-MM-DDTHH:mm:ssZ',
       type: 'text',
       required: true,
+      dataType: 'string',
+      size: { ...DEFAULT_STRING_SIZE },
     },
     {
       id: 'field-3',
@@ -173,6 +187,8 @@ const INITIAL_CONFIG: FormConfig = {
       }),
       type: 'textarea',
       required: true,
+      dataType: 'string',
+      size: { ...DEFAULT_STRING_SIZE },
     },
   ],
 };
@@ -240,7 +256,14 @@ const fieldDragHandleStyles = css`
 
 interface PreviewCardProps extends CustomizableFormPreviewProps {}
 
-const PreviewCard = ({ config, fieldValues, onFieldValueChange, isSubmitDisabled, onSubmit }: PreviewCardProps) => (
+const PreviewCard = ({
+  config,
+  fieldValues,
+  onFieldValueChange,
+  isSubmitDisabled,
+  onSubmit,
+  validationByFieldId,
+}: PreviewCardProps) => (
   <EuiPanel paddingSize="m" hasShadow hasBorder={false}>
     <PanelHeader
       title={i18n.translate('customizableForm.builder.previewPanelTitle', {
@@ -253,6 +276,7 @@ const PreviewCard = ({ config, fieldValues, onFieldValueChange, isSubmitDisabled
       onFieldValueChange={onFieldValueChange}
       isSubmitDisabled={isSubmitDisabled}
       onSubmit={onSubmit}
+      validationByFieldId={validationByFieldId}
     />
   </EuiPanel>
 );
@@ -626,6 +650,8 @@ export const CustomizableFormBuilder = ({
       placeholder: '',
       type: 'text',
       required: false,
+      dataType: 'string',
+      size: { ...DEFAULT_STRING_SIZE },
     };
     setFormConfig((prev) => ({ ...prev, fields: [...prev.fields, newField] }));
   };
@@ -994,12 +1020,25 @@ export const CustomizableFormBuilder = ({
     return status;
   }, [formConfig.connectors, connectorSelectionState, templateValidationByConnector, isLoadingConnectors]);
 
+  const fieldValidationById = useMemo(() => {
+    const map: Record<string, FieldValidationResult> = {};
+    formConfig.fields.forEach((field) => {
+      map[field.id] = getFieldValidationResult(field, fieldValues[field.id] ?? '');
+    });
+    return map;
+  }, [formConfig.fields, fieldValues]);
+
+  const hasFieldValidationWarnings = useMemo(
+    () => Object.values(fieldValidationById).some((result) => result.isOutOfRange),
+    [fieldValidationById]
+  );
+
   const isSubmitDisabled = useMemo(
     () =>
       formConfig.fields.some(
         (field) => field.required && !(fieldValues[field.id]?.trim())
-      ),
-    [formConfig.fields, fieldValues]
+      ) || hasFieldValidationWarnings,
+    [formConfig.fields, fieldValues, hasFieldValidationWarnings]
   );
 
   const renderedPayloads = useMemo(() => {
@@ -1268,13 +1307,14 @@ export const CustomizableFormBuilder = ({
         <EuiFlexItem grow={4}>
           <EuiFlexGroup direction="column" gutterSize="m">
             <EuiFlexItem grow={false}>
-              <PreviewCard
-                config={formConfig}
-                fieldValues={fieldValues}
-                onFieldValueChange={handleFieldValueChange}
-                isSubmitDisabled={isSubmitDisabled}
-                onSubmit={handleTestSubmission}
-              />
+            <PreviewCard
+              config={formConfig}
+              fieldValues={fieldValues}
+              onFieldValueChange={handleFieldValueChange}
+              isSubmitDisabled={isSubmitDisabled}
+              onSubmit={handleTestSubmission}
+              validationByFieldId={fieldValidationById}
+            />
             </EuiFlexItem>
             <EuiFlexItem grow={false}>
               <InfoPanel
@@ -1827,6 +1867,23 @@ const ConfigurationPanel = ({
                         values: { number: index + 1 },
                       });
 
+                    const sizeDefaults = getDefaultSizeForDataType(field.dataType);
+                    const sizeBounds = field.dataType === 'number' ? DEFAULT_NUMBER_SIZE : DEFAULT_STRING_SIZE;
+                    const currentSize = field.size ?? sizeDefaults;
+                    const sanitizedMin = Math.min(
+                      sizeBounds.max,
+                      Math.max(sizeBounds.min, currentSize.min)
+                    );
+                    const sanitizedMax = Math.max(
+                      sanitizedMin,
+                      Math.min(sizeBounds.max, currentSize.max)
+                    );
+                    const sizeRange: [string, string] = [
+                      String(sanitizedMin),
+                      String(sanitizedMax),
+                    ];
+                    const isBooleanType = field.dataType === 'boolean';
+
                     return (
                       <EuiDraggable
                         key={field.id}
@@ -1953,6 +2010,83 @@ const ConfigurationPanel = ({
                                   }
                                 />
                               </EuiFormRow>
+
+                              <EuiFormRow
+                                label={i18n.translate('customizableForm.builder.fieldDataTypeLabel', {
+                                  defaultMessage: 'Field data type',
+                                })}
+                              >
+                                <EuiSelect
+                                  options={[
+                                    {
+                                      value: 'string',
+                                      text: i18n.translate('customizableForm.builder.fieldDataType.string', {
+                                        defaultMessage: 'String',
+                                      }),
+                                    },
+                                    {
+                                      value: 'number',
+                                      text: i18n.translate('customizableForm.builder.fieldDataType.number', {
+                                        defaultMessage: 'Number',
+                                      }),
+                                    },
+                                    {
+                                      value: 'boolean',
+                                      text: i18n.translate('customizableForm.builder.fieldDataType.boolean', {
+                                        defaultMessage: 'Boolean',
+                                      }),
+                                    },
+                                  ]}
+                                  value={field.dataType}
+                                  onChange={(e: ChangeEvent<HTMLSelectElement>) => {
+                                    const nextType = e.target.value as FormFieldDataType;
+                                    onFieldChange(field.id, {
+                                      dataType: nextType,
+                                      size:
+                                        nextType === 'boolean'
+                                          ? undefined
+                                          : field.size ?? getDefaultSizeForDataType(nextType),
+                                    });
+                                  }}
+                                />
+                              </EuiFormRow>
+
+                              {!isBooleanType ? (
+                                <EuiFormRow
+                                  label={i18n.translate('customizableForm.builder.fieldSizeLabel', {
+                                    defaultMessage: 'Size constraint',
+                                  })}
+                                  helpText={i18n.translate('customizableForm.builder.fieldSizeHelpText', {
+                                    defaultMessage: 'Allowed {type} range. Values outside this range trigger a warning and inhibit submission.',
+                                    values: {
+                                      type: field.dataType === 'number' ? 'numeric' : 'character',
+                                    },
+                                  })}
+                                >
+                                  <EuiDualRange
+                                    min={sizeBounds.min}
+                                    max={sizeBounds.max}
+                                    value={sizeRange}
+                                    showInput="inputWithPopover"
+                                    onChange={(range) => {
+                                      const [minValue, maxValue] = range.map((val) => Number(val));
+                                      const normalizedMin = Number.isFinite(minValue)
+                                        ? Math.max(sizeBounds.min, Math.floor(minValue))
+                                        : sizeBounds.min;
+                                      const normalizedMax = Number.isFinite(maxValue)
+                                        ? Math.max(normalizedMin, Math.floor(maxValue))
+                                        : Math.max(normalizedMin, sizeBounds.max);
+                                      onFieldChange(field.id, {
+                                        size: {
+                                          min: normalizedMin,
+                                          max: normalizedMax,
+                                        },
+                                      });
+                                    }}
+                                    fullWidth
+                                  />
+                                </EuiFormRow>
+                              ) : null}
 
                               <EuiFormRow display="columnCompressed">
                                 <EuiSwitch
