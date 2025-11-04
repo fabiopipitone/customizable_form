@@ -318,7 +318,7 @@ export const getCustomizableFormEmbeddableFactory = ({
         }
 
         return (
-          <div>
+          <div style={{ width: '100%' }}>
             <CustomizableFormPreview
               config={document.formConfig}
               fieldValues={fieldValues}

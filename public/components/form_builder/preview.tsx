@@ -23,6 +23,8 @@ const previewInputPlaceholderStyles = css`
 
 const previewContainerStyles = css`
   padding: 0 16px 16px;
+  width: 100%;
+  box-sizing: border-box;
 `;
 
 const GRID_GAP = 16;
@@ -63,6 +65,23 @@ const getCellStyles = (columnsInRow: number) =>
 const cellContentStyles = css`
   flex: 1 1 auto;
   min-width: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+`;
+
+const formRowStyles = css`
+  width: 100%;
+  max-width: none;
+
+  .euiFormRow__fieldWrapper {
+    width: 100%;
+  }
+`;
+
+const formStyles = css`
+  width: 100%;
+  max-width: none;
 `;
 
 export interface CustomizableFormPreviewProps {
@@ -126,7 +145,12 @@ export const CustomizableFormPreview = ({
       {showTitle || showDescription ? <EuiSpacer size="m" /> : <EuiSpacer size="s" />}
 
       {hasFields ? (
-        <EuiForm component="form" fullWidth onSubmit={(event) => event.preventDefault()}>
+        <EuiForm
+          component="form"
+          fullWidth
+          css={formStyles}
+          onSubmit={(event) => event.preventDefault()}
+        >
           <div css={gridStyles}>
             {config.fields.map((field, index) => {
               const isInLastRow = totalFields > 0 && index >= lastRowStartIndex;
@@ -135,6 +159,7 @@ export const CustomizableFormPreview = ({
                 <div key={field.id} css={getCellStyles(columnsForRow)}>
                   <div css={cellContentStyles}>
                     <EuiFormRow
+                      css={formRowStyles}
                       fullWidth
                       label={field.label || field.key}
                       labelAppend={
