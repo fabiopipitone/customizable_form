@@ -626,11 +626,6 @@ export const getCustomizableFormEmbeddableFactory = ({
                 isSubmitting={isSubmitting}
               />
               <EuiSpacer size="s" />
-              <EuiText color="subdued" size="s">
-                {i18n.translate('customizableForm.embeddable.connectorPlaceholder', {
-                  defaultMessage: 'Submitting executes the configured connectors.',
-                })}
-              </EuiText>
             </div>
           </>
         );

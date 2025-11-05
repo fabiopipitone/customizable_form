@@ -159,7 +159,7 @@ const INITIAL_CONFIG: FormConfig = {
   }),
   description: i18n.translate('customizableForm.builder.initialDescription', {
     defaultMessage:
-      'Define the inputs for the dashboard widget and map them to the connector payload.',
+      'Describe form goals and connectors',
   }),
   showTitle: true,
   showDescription: true,
