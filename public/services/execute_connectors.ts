@@ -85,6 +85,50 @@ const executeIndexConnector = async (
   }
 };
 
+const executeWebhookConnector = async (
+  http: CoreStart['http'],
+  connector: FormConnectorConfig,
+  payload: string
+): Promise<ConnectorExecutionResult> => {
+  if (!connector.connectorId) {
+    return {
+      connector,
+      status: 'error',
+      message: 'Connector is missing an identifier.',
+    };
+  }
+
+  const trimmed = payload.trim();
+  if (!trimmed) {
+    return {
+      connector,
+      status: 'error',
+      message: 'Rendered payload is empty.',
+    };
+  }
+
+  try {
+    await http.post(`/api/actions/connector/${encodeURIComponent(connector.connectorId)}/_execute`, {
+      body: JSON.stringify({
+        params: {
+          body: trimmed,
+        },
+      }),
+    });
+
+    return {
+      connector,
+      status: 'success',
+    };
+  } catch (error) {
+    return {
+      connector,
+      status: 'error',
+      message: getErrorMessage(error),
+    };
+  }
+};
+
 export const executeFormConnectors = async ({
   http,
   connectors,
@@ -107,6 +151,11 @@ export const executeFormConnectors = async ({
     switch (connector.connectorTypeId) {
       case '.index': {
         const result = await executeIndexConnector(http, connector, payload);
+        results.push(result);
+        break;
+      }
+      case '.webhook': {
+        const result = await executeWebhookConnector(http, connector, payload);
         results.push(result);
         break;
       }
