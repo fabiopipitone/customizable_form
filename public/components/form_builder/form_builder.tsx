@@ -20,7 +20,6 @@ import {
   EuiConfirmModal,
   EuiButtonIcon,
   EuiCallOut,
-  EuiCodeBlock,
   EuiDragDropContext,
   EuiDraggable,
   EuiDroppable,
@@ -72,18 +71,16 @@ import {
   VARIABLE_NAME_RULES,
   type VariableNameValidationResult,
 } from './validation';
-import {
-  CustomizableFormPreview,
-  type CustomizableFormPreviewProps,
-  getFieldValidationResult,
-  type FieldValidationResult,
-} from './preview';
+import { getFieldValidationResult, type FieldValidationResult } from './preview';
 import {
   ConnectorSummaryTable,
   DEFAULT_CONNECTOR_SUMMARY_STATUS,
   type ConnectorSummaryItem,
   type ConnectorSummaryStatus,
 } from './connector_summary';
+import PanelHeader from './panel_header';
+import PreviewCard from './preview_card';
+import InfoPanel from './info_panel';
 import { executeFormConnectors } from '../../services/execute_connectors';
 import {
   createCustomizableForm,
@@ -237,23 +234,6 @@ const getTemplateVariables = (template: string): string[] => {
   return Array.from(variables);
 };
 
-const PanelHeader = ({ title }: { title: string }) => (
-  <div
-    style={{
-      backgroundColor: '#eef3fc',
-      padding: '12px 16px',
-      borderBottom: '1px solid #d3dae6',
-      borderTopLeftRadius: 4,
-      borderTopRightRadius: 4,
-      margin: '-16px -16px 16px -16px',
-    }}
-  >
-    <EuiTitle size="xs">
-      <h3 style={{ margin: 0 }}>{title}</h3>
-    </EuiTitle>
-  </div>
-);
-
 const fieldDragHandleStyles = css`
   display: inline-flex;
   align-items: center;
@@ -268,35 +248,6 @@ const fieldDragHandleStyles = css`
     box-shadow: 0 0 0 2px rgba(0, 119, 204, 0.3);
   }
 `;
-
-interface PreviewCardProps extends CustomizableFormPreviewProps {}
-
-const PreviewCard = ({
-  config,
-  fieldValues,
-  onFieldValueChange,
-  isSubmitDisabled,
-  onSubmit,
-  validationByFieldId,
-  isSubmitting,
-}: PreviewCardProps) => (
-  <EuiPanel paddingSize="m" hasShadow hasBorder={false}>
-    <PanelHeader
-      title={i18n.translate('customizableForm.builder.previewPanelTitle', {
-        defaultMessage: 'Preview',
-      })}
-    />
-    <CustomizableFormPreview
-      config={config}
-      fieldValues={fieldValues}
-      onFieldValueChange={onFieldValueChange}
-      isSubmitDisabled={isSubmitDisabled}
-      onSubmit={onSubmit}
-      validationByFieldId={validationByFieldId}
-      isSubmitting={isSubmitting}
-    />
-  </EuiPanel>
-);
 
 type ConnectorStatus = ConnectorSummaryStatus;
 const DEFAULT_CONNECTOR_STATUS: ConnectorStatus = DEFAULT_CONNECTOR_SUMMARY_STATUS;
@@ -2504,169 +2455,6 @@ const ConfigurationPanel = ({
           </EuiButton>
         </EuiFlexItem>
       </EuiFlexGroup>
-    </EuiPanel>
-  );
-};
-
-interface InfoPanelProps {
-  connectorSummaries: Array<{
-    config: FormConnectorConfig;
-    label: string;
-    type: ActionType & { id: SupportedConnectorTypeId } | null;
-    connector: ActionConnector & { actionTypeId: SupportedConnectorTypeId } | null;
-    status: ConnectorStatus;
-  }>;
-  connectorSummaryItems: ConnectorSummaryItem[];
-  renderedPayloads: Record<string, string>;
-  templateValidationByConnector: Record<string, { missing: string[]; unused: Array<{ key: string; label: string }> }>;
-}
-
-const InfoPanel = ({
-  connectorSummaries,
-  connectorSummaryItems,
-  renderedPayloads,
-  templateValidationByConnector,
-}: InfoPanelProps) => {
-  const [activePayloadId, setActivePayloadId] = useState<string | null>(
-    connectorSummaries[0]?.config.id ?? null
-  );
-
-  useEffect(() => {
-    if (connectorSummaries.length === 0) {
-      if (activePayloadId !== null) {
-        setActivePayloadId(null);
-      }
-      return;
-    }
-
-    const stillExists = connectorSummaries.some((summary) => summary.config.id === activePayloadId);
-    if (!stillExists) {
-      setActivePayloadId(connectorSummaries[0].config.id);
-    }
-  }, [connectorSummaries, activePayloadId]);
-
-  const activeValidation = activePayloadId
-    ? templateValidationByConnector[activePayloadId] ?? { missing: [], unused: [] }
-    : { missing: [], unused: [] };
-
-  const activePayload = activePayloadId ? renderedPayloads[activePayloadId] ?? '' : '';
-
-  return (
-    <EuiPanel paddingSize="m" hasShadow hasBorder={false}>
-      <PanelHeader
-        title={i18n.translate('customizableForm.builder.infoPanelTitle', {
-          defaultMessage: 'Info',
-        })}
-      />
-
-      <section>
-        <EuiTitle size="xs">
-          <h3>
-            {i18n.translate('customizableForm.builder.infoPanel.summaryTitle', {
-              defaultMessage: 'Connectors Summary',
-            })}
-          </h3>
-        </EuiTitle>
-
-        <EuiSpacer size="s" />
-
-        {connectorSummaries.length === 0 ? (
-          <EuiText size="s" color="subdued">
-            {i18n.translate('customizableForm.builder.infoPanel.summaryEmpty', {
-              defaultMessage: 'No connectors configured yet.',
-            })}
-          </EuiText>
-        ) : (
-          <ConnectorSummaryTable items={connectorSummaryItems} />
-        )}
-      </section>
-
-      <EuiSpacer size="m" />
-
-      <hr style={{ border: 'none', borderTop: '1px solid #d3dae6', margin: '8px 0 16px' }} />
-
-      <section>
-        <EuiTitle size="xs">
-          <h3>
-            {i18n.translate('customizableForm.builder.infoPanel.payloadsTitle', {
-              defaultMessage: 'Payloads Preview',
-            })}
-          </h3>
-        </EuiTitle>
-
-        <EuiSpacer size="s" />
-
-        {connectorSummaries.length === 0 ? (
-          <EuiEmptyPrompt
-            iconType="indexMapping"
-            title={
-              <h3>
-                {i18n.translate('customizableForm.builder.infoPanel.payloadsEmptyTitle', {
-                  defaultMessage: 'No payloads available',
-                })}
-              </h3>
-            }
-            body={i18n.translate('customizableForm.builder.infoPanel.payloadsEmptyBody', {
-              defaultMessage: 'Configure at least one connector to preview payloads.',
-            })}
-          />
-        ) : (
-          <>
-            <EuiTabs>
-              {connectorSummaries.map(({ config, label, status }) => (
-                <EuiTab
-                  key={`payload-tab-${config.id}`}
-                  isSelected={activePayloadId === config.id}
-                  onClick={() => setActivePayloadId(config.id)}
-                >
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <span>{label}</span>
-                    {status.hasTemplateError || status.hasError ? (
-                      <EuiIcon type="alert" color="danger" size="s" />
-                    ) : null}
-                    {!status.hasTemplateError && !status.hasError &&
-                    (status.hasTemplateWarning || status.hasWarning) ? (
-                      <EuiIcon type="warning" color="warning" size="s" />
-                    ) : null}
-                  </span>
-                </EuiTab>
-              ))}
-            </EuiTabs>
-
-            <EuiSpacer size="m" />
-
-            <EuiCodeBlock language="json" isCopyable>
-              {activePayload}
-            </EuiCodeBlock>
-
-            {activeValidation.missing.length > 0 ? (
-              <>
-                <EuiSpacer size="s" />
-                <EuiText color="danger" size="s">
-                  {i18n.translate('customizableForm.builder.infoPanel.payloadMissingVariables', {
-                    defaultMessage: 'Missing variables: {variables}.',
-                    values: { variables: activeValidation.missing.join(', ') },
-                  })}
-                </EuiText>
-              </>
-            ) : null}
-
-            {activeValidation.missing.length === 0 && activeValidation.unused.length > 0 ? (
-              <>
-                <EuiSpacer size="s" />
-                <EuiText color="warning" size="s">
-                  {i18n.translate('customizableForm.builder.infoPanel.payloadUnusedFields', {
-                    defaultMessage: 'Unused fields: {fields}.',
-                    values: {
-                      fields: activeValidation.unused.map((field) => field.label).join(', '),
-                    },
-                  })}
-                </EuiText>
-              </>
-            ) : null}
-          </>
-        )}
-      </section>
     </EuiPanel>
   );
 };
