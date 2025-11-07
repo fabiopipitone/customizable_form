@@ -1,10 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { i18n } from '@kbn/i18n';
 import type { AppMountParameters, CoreStart, NotificationsStart } from '@kbn/core/public';
 import { showSaveModal } from '@kbn/saved-objects-plugin/public';
@@ -50,6 +44,7 @@ import PreviewCard from './preview_card';
 import InfoPanel from './info_panel';
 import { ConfigurationPanel } from './configuration_panel';
 import { useConnectorsData, getCanonicalConnectorTypeId } from './use_connectors_data';
+import { useFormConfigState } from './use_form_config_state';
 import { executeFormConnectors } from '../../services/execute_connectors';
 import {
   createCustomizableForm,
@@ -203,12 +198,26 @@ export const CustomizableFormBuilder = ({
   application,
   history,
 }: CustomizableFormBuilderProps) => {
-  const [formConfig, setFormConfig] = useState<FormConfig>(INITIAL_CONFIG);
+  const {
+    formConfig,
+    replaceFormConfig,
+    updateConfig,
+    updateField,
+    removeField,
+    addField,
+    handleFieldReorder,
+    addConnector: addConnectorInternal,
+    removeConnector: removeConnectorInternal,
+    handleConnectorTypeChange: handleConnectorTypeChangeInternal,
+    handleConnectorChange: handleConnectorChangeInternal,
+    handleConnectorLabelChange,
+    handleConnectorTemplateChange,
+    syncConnectorSelections,
+  } = useFormConfigState({ initialConfig: INITIAL_CONFIG });
+
   const [savedObjectAttributes, setSavedObjectAttributes] = useState<CustomizableFormAttributesMeta>(
     () => ({ ...INITIAL_SAVED_OBJECT_ATTRIBUTES })
   );
-  const fieldCounter = useRef<number>(INITIAL_CONFIG.fields.length);
-  const connectorCounter = useRef<number>(INITIAL_CONFIG.connectors.length);
 
   const [savedObjectId, setSavedObjectId] = useState<string | null>(
     mode === 'edit' && initialSavedObjectId ? initialSavedObjectId : null
@@ -232,6 +241,46 @@ export const CustomizableFormBuilder = ({
     buildInitialFieldValues(INITIAL_CONFIG.fields)
   );
 
+  const addConnector = useCallback(() => {
+    addConnectorInternal({
+      connectorTypes,
+      connectors,
+      defaultTemplate: DEFAULT_TEMPLATE,
+    });
+  }, [addConnectorInternal, connectorTypes, connectors]);
+
+  const handleConnectorTypeChange = useCallback(
+    (connectorConfigId: string, nextTypeId: string) => {
+      const canonicalNextTypeId = getCanonicalConnectorTypeId(nextTypeId) ?? '';
+      handleConnectorTypeChangeInternal(connectorConfigId, canonicalNextTypeId, {
+        connectorTypes,
+        connectors,
+      });
+    },
+    [connectorTypes, connectors, handleConnectorTypeChangeInternal]
+  );
+
+  const handleConnectorChange = useCallback(
+    (connectorConfigId: string, nextConnectorId: string) => {
+      handleConnectorChangeInternal(connectorConfigId, nextConnectorId, {
+        connectorTypes,
+        connectors,
+      });
+    },
+    [connectorTypes, connectors, handleConnectorChangeInternal]
+  );
+
+  const removeConnector = useCallback(
+    (connectorConfigId: string) => {
+      removeConnectorInternal(connectorConfigId);
+    },
+    [removeConnectorInternal]
+  );
+
+  useEffect(() => {
+    syncConnectorSelections({ connectorTypes, connectors });
+  }, [connectorTypes, connectors, syncConnectorSelections]);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -246,14 +295,12 @@ export const CustomizableFormBuilder = ({
         }
         const document = getDocumentFromResolveResponse(resolveResult);
         const nextConfig = document.formConfig;
-        setFormConfig(nextConfig);
+        replaceFormConfig(nextConfig);
         setSavedObjectAttributes({
           title: document.attributes.title || nextConfig.title,
           description:
             document.attributes.description ?? nextConfig.description,
         });
-        fieldCounter.current = nextConfig.fields.length;
-        connectorCounter.current = nextConfig.connectors.length;
         setFieldValues(buildInitialFieldValues(nextConfig.fields));
         setSavedObjectId(resolveResult.saved_object.id);
       } catch (error) {
@@ -295,10 +342,8 @@ export const CustomizableFormBuilder = ({
       setSavedObjectId(null);
       setInitialLoadError(null);
       setIsInitialLoading(false);
-      setFormConfig(INITIAL_CONFIG);
+      replaceFormConfig(INITIAL_CONFIG);
       setSavedObjectAttributes({ ...INITIAL_SAVED_OBJECT_ATTRIBUTES });
-      fieldCounter.current = INITIAL_CONFIG.fields.length;
-      connectorCounter.current = INITIAL_CONFIG.connectors.length;
       setFieldValues(buildInitialFieldValues(INITIAL_CONFIG.fields));
     }
 
@@ -307,323 +352,6 @@ export const CustomizableFormBuilder = ({
     };
   }, [http, mode, initialSavedObjectId, toasts]);
 
-  useEffect(() => {
-    setFormConfig((prev) => {
-      if (prev.connectors.length === 0) {
-        return prev;
-      }
-
-      const validTypeIds = new Set<SupportedConnectorTypeId>(connectorTypes.map((type) => type.id));
-      let hasChanges = false;
-
-      const nextConnectors = prev.connectors.map((connectorConfig, index) => {
-        let nextTypeId = connectorConfig.connectorTypeId as SupportedConnectorTypeId | '';
-        const currentTypeIsValid =
-          nextTypeId !== '' ? validTypeIds.has(nextTypeId as SupportedConnectorTypeId) : false;
-        if (!currentTypeIsValid) {
-          nextTypeId = connectorTypes[0]?.id ?? '';
-        }
-
-        const connectorsForType = nextTypeId
-          ? connectors.filter((connector) => connector.actionTypeId === nextTypeId)
-          : [];
-
-        const takenConnectorIds = new Set(
-          prev.connectors
-            .filter((item) => item.id !== connectorConfig.id)
-            .map((item) => item.connectorId)
-            .filter((id): id is string => Boolean(id))
-        );
-
-        const availableConnectorsForType = connectorsForType.filter(
-          (connector) => !takenConnectorIds.has(connector.id)
-        );
-
-        let nextConnectorId = connectorConfig.connectorId;
-        const connectorIsValid = nextConnectorId
-          ? availableConnectorsForType.some((connector) => connector.id === nextConnectorId)
-          : false;
-
-        if (!connectorIsValid) {
-          nextConnectorId = availableConnectorsForType[0]?.id ?? '';
-        }
-
-        const selectedConnectorInstance = nextConnectorId
-          ? connectors.find((connector) => connector.id === nextConnectorId) ?? null
-          : null;
-        const selectedType = nextTypeId
-          ? connectorTypes.find((type) => type.id === nextTypeId) ?? null
-          : null;
-        const fallbackLabel = getConnectorFallbackLabel(index);
-
-        let nextLabel = connectorConfig.label || '';
-        let nextIsLabelAuto = connectorConfig.isLabelAuto ?? true;
-        if (nextIsLabelAuto) {
-          const defaultLabel =
-            selectedConnectorInstance?.name ?? selectedType?.name ?? fallbackLabel;
-          nextLabel = defaultLabel;
-          nextIsLabelAuto = true;
-        }
-
-        if (
-          nextTypeId !== connectorConfig.connectorTypeId ||
-          nextConnectorId !== connectorConfig.connectorId ||
-          nextLabel !== connectorConfig.label ||
-          nextIsLabelAuto !== connectorConfig.isLabelAuto
-        ) {
-          hasChanges = true;
-          return {
-            ...connectorConfig,
-            connectorTypeId: nextTypeId,
-            connectorId: nextConnectorId,
-            label: nextLabel,
-            isLabelAuto: nextIsLabelAuto,
-          };
-        }
-
-        return connectorConfig;
-      });
-
-      if (!hasChanges) {
-        return prev;
-      }
-
-      return {
-        ...prev,
-        connectors: nextConnectors,
-      };
-    });
-  }, [connectorTypes, connectors]);
-
-  const updateConfig = (partial: Partial<FormConfig>) => {
-    setFormConfig((prev) => ({ ...prev, ...partial }));
-  };
-
-  const updateField = (fieldId: string, changes: Partial<FormFieldConfig>) => {
-    setFormConfig((prev) => ({
-      ...prev,
-      fields: prev.fields.map((f) => (f.id === fieldId ? { ...f, ...changes } : f)),
-    }));
-  };
-
-  const removeField = (fieldId: string) => {
-    setFormConfig((prev) => ({
-      ...prev,
-      fields: prev.fields.filter((f) => f.id !== fieldId),
-    }));
-  };
-
-  const addField = () => {
-    fieldCounter.current += 1;
-    const n = fieldCounter.current;
-    const newField: FormFieldConfig = {
-      id: `field-${n}`,
-      key: `field_${n}`,
-      label: i18n.translate('customizableForm.builder.newFieldLabel', {
-        defaultMessage: 'Field {position}',
-        values: { position: n },
-      }),
-      placeholder: '',
-      type: 'text',
-      required: false,
-      dataType: 'string',
-      size: { ...DEFAULT_STRING_SIZE },
-    };
-    setFormConfig((prev) => ({ ...prev, fields: [...prev.fields, newField] }));
-  };
-
-  const addConnector = useCallback(() => {
-    connectorCounter.current += 1;
-    const index = connectorCounter.current;
-
-    setFormConfig((prev) => {
-      const takenConnectorIds = new Set(
-        prev.connectors.map((connectorConfig) => connectorConfig.connectorId).filter((id) => id)
-      );
-
-      const defaultTypeId = connectorTypes[0]?.id ?? '';
-      const allConnectorsForType = defaultTypeId
-        ? connectors.filter((connector) => connector.actionTypeId === defaultTypeId)
-        : [];
-      const availableConnectorsForType = allConnectorsForType.filter(
-        (connector) => !takenConnectorIds.has(connector.id)
-      );
-      const defaultConnectorId = availableConnectorsForType[0]?.id ?? '';
-
-      const selectedType = defaultTypeId
-        ? connectorTypes.find((type) => type.id === defaultTypeId) ?? null
-        : null;
-      const selectedConnector = defaultConnectorId
-        ? connectors.find((connector) => connector.id === defaultConnectorId) ?? null
-        : null;
-
-      const defaultLabel =
-        selectedConnector?.name ?? selectedType?.name ?? getConnectorFallbackLabel(prev.connectors.length);
-
-      const newConnector: FormConnectorConfig = {
-        id: `connector-${index}`,
-        connectorTypeId: defaultTypeId,
-        connectorId: defaultConnectorId,
-        label: defaultLabel,
-        isLabelAuto: true,
-        documentTemplate: DEFAULT_TEMPLATE,
-      };
-
-      return {
-        ...prev,
-        connectors: [...prev.connectors, newConnector],
-      };
-    });
-  }, [connectorTypes, connectors]);
-
-  const removeConnector = useCallback((connectorConfigId: string) => {
-    setFormConfig((prev) => ({
-      ...prev,
-      connectors: prev.connectors.filter((item) => item.id !== connectorConfigId),
-    }));
-  }, []);
-
-  const handleConnectorTypeChange = useCallback(
-    (connectorConfigId: string, nextTypeId: string) => {
-      const canonicalNextTypeId = getCanonicalConnectorTypeId(nextTypeId) ?? '';
-      setFormConfig((prev) => ({
-        ...prev,
-        connectors: prev.connectors.map((item, index) => {
-          if (item.id !== connectorConfigId) {
-            return item;
-          }
-          if (item.connectorTypeId === canonicalNextTypeId) {
-            return item;
-          }
-
-          const wasLabelAuto = item.isLabelAuto ?? true;
-
-          const connectorsForTypeAll = canonicalNextTypeId
-            ? connectors.filter((c) => c.actionTypeId === canonicalNextTypeId)
-            : [];
-
-          const takenConnectorIds = new Set(
-            prev.connectors
-              .filter((connectorConfig) => connectorConfig.id !== connectorConfigId)
-              .map((connectorConfig) => connectorConfig.connectorId)
-              .filter((id): id is string => Boolean(id))
-          );
-
-          const availableConnectorsForType = connectorsForTypeAll.filter(
-            (connector) => !takenConnectorIds.has(connector.id)
-          );
-
-          const currentConnectorIsAvailable = item.connectorId
-            ? availableConnectorsForType.some((connector) => connector.id === item.connectorId)
-            : false;
-
-          const nextConnectorIdValue = currentConnectorIsAvailable
-            ? item.connectorId
-            : availableConnectorsForType[0]?.id ?? '';
-
-          const selectedType = canonicalNextTypeId
-            ? connectorTypes.find((type) => type.id === canonicalNextTypeId) ?? null
-            : null;
-          const selectedConnector = nextConnectorIdValue
-            ? connectors.find((connector) => connector.id === nextConnectorIdValue) ?? null
-            : null;
-
-          const defaultLabel =
-            selectedConnector?.name ?? selectedType?.name ?? getConnectorFallbackLabel(index);
-
-          return {
-            ...item,
-            connectorTypeId: canonicalNextTypeId,
-            connectorId: nextConnectorIdValue,
-            label: wasLabelAuto ? defaultLabel : item.label,
-            isLabelAuto: wasLabelAuto,
-          };
-        }),
-      }));
-    },
-    [connectors, connectorTypes]
-  );
-
-  const handleConnectorChange = useCallback(
-    (connectorConfigId: string, nextConnectorId: string) => {
-      setFormConfig((prev) => ({
-        ...prev,
-        connectors: prev.connectors.map((item, index) => {
-          if (item.id !== connectorConfigId) {
-            return item;
-          }
-
-          const takenConnectorIds = new Set(
-            prev.connectors
-              .filter((connectorConfig) => connectorConfig.id !== connectorConfigId)
-              .map((connectorConfig) => connectorConfig.connectorId)
-              .filter((id): id is string => Boolean(id))
-          );
-
-          const connectorsForTypeAll = item.connectorTypeId
-            ? connectors.filter((connector) => connector.actionTypeId === item.connectorTypeId)
-            : [];
-
-          const availableConnectorsForType = connectorsForTypeAll.filter(
-            (connector) => !takenConnectorIds.has(connector.id)
-          );
-
-          const requestedConnectorIsAvailable = nextConnectorId
-            ? availableConnectorsForType.some((connector) => connector.id === nextConnectorId)
-            : false;
-
-          const nextConnectorIdValue = requestedConnectorIsAvailable
-            ? nextConnectorId
-            : availableConnectorsForType[0]?.id ?? '';
-
-          const selectedConnectorInstance = nextConnectorIdValue
-            ? connectors.find((connector) => connector.id === nextConnectorIdValue) ?? null
-            : null;
-          const selectedType = item.connectorTypeId
-            ? connectorTypes.find((type) => type.id === item.connectorTypeId) ?? null
-            : null;
-          const defaultLabel = selectedConnectorInstance?.name ?? selectedType?.name ?? getConnectorFallbackLabel(index);
-
-          const wasLabelAuto = item.isLabelAuto ?? true;
-
-          return {
-            ...item,
-            connectorId: nextConnectorIdValue,
-            label: wasLabelAuto ? defaultLabel : item.label,
-            isLabelAuto: wasLabelAuto,
-          };
-        }),
-      }));
-    },
-    [connectors, connectorTypes]
-  );
-
-  const handleConnectorLabelChange = useCallback((connectorConfigId: string, label: string) => {
-    setFormConfig((prev) => ({
-      ...prev,
-      connectors: prev.connectors.map((item) =>
-        item.id === connectorConfigId
-          ? {
-              ...item,
-              label,
-              isLabelAuto: false,
-            }
-          : item
-      ),
-    }));
-  }, []);
-
-  const handleConnectorTemplateChange = useCallback(
-    (connectorConfigId: string, template: string) => {
-      setFormConfig((prev) => ({
-        ...prev,
-        connectors: prev.connectors.map((item) =>
-          item.id === connectorConfigId ? { ...item, documentTemplate: template } : item
-        ),
-      }));
-    },
-    []
-  );
 
   useEffect(() => {
     setFieldValues((prev) => {
@@ -643,32 +371,6 @@ export const CustomizableFormBuilder = ({
       return {
         ...prev,
         [fieldId]: value,
-      };
-    });
-  }, []);
-
-  const handleFieldReorder = useCallback((sourceIndex: number, destinationIndex: number) => {
-    if (sourceIndex === destinationIndex) {
-      return;
-    }
-
-    setFormConfig((prev) => {
-      if (
-        sourceIndex < 0 ||
-        destinationIndex < 0 ||
-        sourceIndex >= prev.fields.length ||
-        destinationIndex >= prev.fields.length
-      ) {
-        return prev;
-      }
-
-      const nextFields = [...prev.fields];
-      const [moved] = nextFields.splice(sourceIndex, 1);
-      nextFields.splice(destinationIndex, 0, moved);
-
-      return {
-        ...prev,
-        fields: nextFields,
       };
     });
   }, []);
