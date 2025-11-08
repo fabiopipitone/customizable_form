@@ -31,6 +31,7 @@ import {
 } from './connector_summary';
 import { useConnectorsData, getCanonicalConnectorTypeId } from './use_connectors_data';
 import { useFormConfigState } from './use_form_config_state';
+import { FormBuilderProvider } from './form_builder_context';
 import FormBuilderLayout from './form_builder_layout';
 import { executeFormConnectors } from '../../services/execute_connectors';
 import {
@@ -851,6 +852,41 @@ export const CustomizableFormBuilder = ({
     setIsSubmitConfirmationVisible(false);
   }, []);
 
+  const formBuilderContextValue = useMemo(
+    () => ({
+      formConfig,
+      fieldValues,
+      updateConfig,
+      addField,
+      removeField,
+      updateField,
+      handleFieldReorder,
+      handleFieldValueChange,
+      addConnector,
+      removeConnector,
+      handleConnectorTypeChange,
+      handleConnectorChange,
+      handleConnectorLabelChange,
+      handleConnectorTemplateChange,
+    }),
+    [
+      formConfig,
+      fieldValues,
+      updateConfig,
+      addField,
+      removeField,
+      updateField,
+      handleFieldReorder,
+      handleFieldValueChange,
+      addConnector,
+      removeConnector,
+      handleConnectorTypeChange,
+      handleConnectorChange,
+      handleConnectorLabelChange,
+      handleConnectorTemplateChange,
+    ]
+  );
+
   if (isInitialLoading) {
     return (
       <div
@@ -899,55 +935,36 @@ export const CustomizableFormBuilder = ({
   }
 
   return (
-    <FormBuilderLayout
-      formConfig={formConfig}
-      fieldValues={fieldValues}
-      onFieldValueChange={handleFieldValueChange}
-      isSubmitDisabled={isSubmitDisabled}
-      onSubmit={handleTestSubmission}
-      validationByFieldId={fieldValidationById}
-      isSubmitting={isExecutingConnectors}
-      connectorSummaries={connectorSummaries}
-      connectorSummaryItems={connectorSummaryItems}
-      renderedPayloads={renderedPayloads}
-      templateValidationByConnector={templateValidationByConnector}
-      isSubmitConfirmationVisible={isSubmitConfirmationVisible}
-      onConfirmConnectorExecution={handleConfirmConnectorExecution}
-      onCancelConnectorExecution={handleCancelConnectorExecution}
-      connectorTypeOptions={connectorTypeOptions}
-      connectorTypes={connectorTypes}
-      connectorsByType={connectorsByType}
-      connectorStatusById={connectorStatusById}
-      connectorSelectionState={connectorSelectionState}
-      isLoadingConnectorTypes={isLoadingConnectorTypes}
-      isLoadingConnectors={isLoadingConnectors}
-      connectorTypesError={connectorTypesError}
-      connectorsError={connectorsError}
-      hasEmptyConnectorLabels={hasEmptyConnectorLabels}
-      variableNameValidationById={variableNameValidationById}
-      hasInvalidVariableNames={hasInvalidVariableNames}
-      isSaveDisabled={isSaveDisabled}
-      isSaving={isSaving}
-      onSaveRequest={handleSaveVisualizationRequest}
-      onConnectorTypeChange={handleConnectorTypeChange}
-      onConnectorChange={handleConnectorChange}
-      onConnectorLabelChange={handleConnectorLabelChange}
-      onConnectorTemplateChange={handleConnectorTemplateChange}
-      onConnectorAdd={addConnector}
-      onConnectorRemove={removeConnector}
-      onFieldChange={updateField}
-      onFieldRemove={removeField}
-      onAddField={addField}
-      onFieldReorder={handleFieldReorder}
-      onTitleChange={(value) => updateConfig({ title: value })}
-      onDescriptionChange={(value) => updateConfig({ description: value })}
-      onShowTitleChange={(value) => updateConfig({ showTitle: value })}
-      onShowDescriptionChange={(value) => updateConfig({ showDescription: value })}
-      onLayoutColumnsChange={(value) => updateConfig({ layoutColumns: value })}
-      onRequireConfirmationChange={(value) =>
-        updateConfig({ requireConfirmationOnSubmit: value })
-      }
-    />
+    <FormBuilderProvider value={formBuilderContextValue}>
+      <FormBuilderLayout
+        isSubmitDisabled={isSubmitDisabled}
+        onSubmit={handleTestSubmission}
+        validationByFieldId={fieldValidationById}
+        isSubmitting={isExecutingConnectors}
+        connectorSummaries={connectorSummaries}
+        connectorSummaryItems={connectorSummaryItems}
+        renderedPayloads={renderedPayloads}
+        templateValidationByConnector={templateValidationByConnector}
+        isSubmitConfirmationVisible={isSubmitConfirmationVisible}
+        onConfirmConnectorExecution={handleConfirmConnectorExecution}
+        onCancelConnectorExecution={handleCancelConnectorExecution}
+        connectorTypeOptions={connectorTypeOptions}
+        connectorTypes={connectorTypes}
+        connectorsByType={connectorsByType}
+        connectorStatusById={connectorStatusById}
+        connectorSelectionState={connectorSelectionState}
+        isLoadingConnectorTypes={isLoadingConnectorTypes}
+        isLoadingConnectors={isLoadingConnectors}
+        connectorTypesError={connectorTypesError}
+        connectorsError={connectorsError}
+        hasEmptyConnectorLabels={hasEmptyConnectorLabels}
+        variableNameValidationById={variableNameValidationById}
+        hasInvalidVariableNames={hasInvalidVariableNames}
+        isSaveDisabled={isSaveDisabled}
+        isSaving={isSaving}
+        onSaveRequest={handleSaveVisualizationRequest}
+      />
+    </FormBuilderProvider>
   );
 };
 

@@ -40,7 +40,6 @@ import {
   MIN_LAYOUT_COLUMNS,
 } from './constants';
 import type {
-  FormConfig,
   FormFieldType,
   FormFieldDataType,
   FormFieldConfig,
@@ -50,6 +49,7 @@ import {
   VARIABLE_NAME_RULES,
   type VariableNameValidationResult,
 } from './validation';
+import { useFormBuilderContext } from './form_builder_context';
 
 const fieldDragHandleStyles = css`
   display: inline-flex;
@@ -100,23 +100,6 @@ const DEFAULT_CONNECTOR_STATUS: ConnectorStatus = {
 };
 
 interface ConfigurationPanelProps {
-  config: FormConfig;
-  onTitleChange: (value: string) => void;
-  onDescriptionChange: (value: string) => void;
-  onShowTitleChange: (value: boolean) => void;
-  onShowDescriptionChange: (value: boolean) => void;
-  onLayoutColumnsChange: (value: number) => void;
-  onRequireConfirmationChange: (value: boolean) => void;
-  onConnectorTypeChange: (connectorConfigId: string, value: string) => void;
-  onConnectorChange: (connectorConfigId: string, value: string) => void;
-  onConnectorLabelChange: (connectorConfigId: string, value: string) => void;
-  onConnectorTemplateChange: (connectorConfigId: string, value: string) => void;
-  onConnectorAdd: () => void;
-  onConnectorRemove: (connectorConfigId: string) => void;
-  onFieldChange: (fieldId: string, changes: Partial<FormFieldConfig>) => void;
-  onFieldRemove: (fieldId: string) => void;
-  onAddField: () => void;
-  onFieldReorder: (sourceIndex: number, destinationIndex: number) => void;
   variableNameValidationById: Record<string, VariableNameValidationResult>;
   hasInvalidVariableNames: boolean;
   onSaveRequest: () => void;
@@ -138,23 +121,6 @@ interface ConfigurationPanelProps {
 type ConfigurationTab = 'general' | 'connectors' | 'fields' | 'payload';
 
 export const ConfigurationPanel = ({
-  config,
-  onTitleChange,
-  onDescriptionChange,
-  onShowTitleChange,
-  onShowDescriptionChange,
-  onConnectorTypeChange,
-  onConnectorChange,
-  onConnectorLabelChange,
-  onConnectorTemplateChange,
-  onConnectorAdd,
-  onConnectorRemove,
-  onFieldChange,
-  onFieldRemove,
-  onAddField,
-  onFieldReorder,
-  onLayoutColumnsChange,
-  onRequireConfirmationChange,
   variableNameValidationById,
   hasInvalidVariableNames,
   onSaveRequest,
@@ -172,6 +138,38 @@ export const ConfigurationPanel = ({
   isSaveDisabled,
   isSaving,
 }: ConfigurationPanelProps) => {
+  const {
+    formConfig,
+    updateConfig,
+    handleConnectorTypeChange,
+    handleConnectorChange,
+    handleConnectorLabelChange,
+    handleConnectorTemplateChange,
+    addConnector,
+    removeConnector,
+    updateField,
+    removeField,
+    addField,
+    handleFieldReorder,
+  } = useFormBuilderContext();
+  const config = formConfig;
+  const onTitleChange = (value: string) => updateConfig({ title: value });
+  const onDescriptionChange = (value: string) => updateConfig({ description: value });
+  const onShowTitleChange = (value: boolean) => updateConfig({ showTitle: value });
+  const onShowDescriptionChange = (value: boolean) => updateConfig({ showDescription: value });
+  const onLayoutColumnsChange = (value: number) => updateConfig({ layoutColumns: value });
+  const onRequireConfirmationChange = (value: boolean) =>
+    updateConfig({ requireConfirmationOnSubmit: value });
+  const onConnectorTypeChange = handleConnectorTypeChange;
+  const onConnectorChange = handleConnectorChange;
+  const onConnectorLabelChange = handleConnectorLabelChange;
+  const onConnectorTemplateChange = handleConnectorTemplateChange;
+  const onConnectorAdd = addConnector;
+  const onConnectorRemove = removeConnector;
+  const onFieldChange = updateField;
+  const onFieldRemove = removeField;
+  const onAddField = addField;
+  const onFieldReorder = handleFieldReorder;
   const [activeTab, setActiveTab] = useState<ConfigurationTab>('general');
 
   const tabs: Array<{ id: ConfigurationTab; label: string }> = [

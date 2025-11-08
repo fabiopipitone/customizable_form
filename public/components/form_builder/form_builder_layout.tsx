@@ -5,9 +5,7 @@ import type { ActionConnector } from '@kbn/alerts-ui-shared/src/common/types';
 import type { ActionType } from '@kbn/actions-types';
 
 import type {
-  FormConfig,
   FormConnectorConfig,
-  FormFieldConfig,
   SupportedConnectorTypeId,
 } from './types';
 import type { FieldValidationResult } from './preview';
@@ -17,6 +15,7 @@ import PreviewCard from './preview_card';
 import InfoPanel from './info_panel';
 import { ConfigurationPanel } from './configuration_panel';
 import { ConnectorSummaryTable } from './connector_summary';
+import { useFormBuilderContext } from './form_builder_context';
 
 interface ConnectorSelectionStateEntry {
   connectorsForType: Array<ActionConnector & { actionTypeId: SupportedConnectorTypeId }>;
@@ -26,9 +25,6 @@ interface ConnectorSelectionStateEntry {
 }
 
 export interface FormBuilderLayoutProps {
-  formConfig: FormConfig;
-  fieldValues: Record<string, string>;
-  onFieldValueChange: (fieldId: string, value: string) => void;
   isSubmitDisabled: boolean;
   onSubmit: () => void;
   validationByFieldId: Record<string, FieldValidationResult>;
@@ -64,28 +60,9 @@ export interface FormBuilderLayoutProps {
   isSaveDisabled: boolean;
   isSaving: boolean;
   onSaveRequest: () => void;
-  onConnectorTypeChange: (connectorConfigId: string, value: string) => void;
-  onConnectorChange: (connectorConfigId: string, value: string) => void;
-  onConnectorLabelChange: (connectorConfigId: string, value: string) => void;
-  onConnectorTemplateChange: (connectorConfigId: string, value: string) => void;
-  onConnectorAdd: () => void;
-  onConnectorRemove: (connectorConfigId: string) => void;
-  onFieldChange: (fieldId: string, changes: Partial<FormFieldConfig>) => void;
-  onFieldRemove: (fieldId: string) => void;
-  onAddField: () => void;
-  onFieldReorder: (sourceIndex: number, destinationIndex: number) => void;
-  onTitleChange: (value: string) => void;
-  onDescriptionChange: (value: string) => void;
-  onShowTitleChange: (value: boolean) => void;
-  onShowDescriptionChange: (value: boolean) => void;
-  onLayoutColumnsChange: (value: number) => void;
-  onRequireConfirmationChange: (value: boolean) => void;
 }
 
 export const FormBuilderLayout = ({
-  formConfig,
-  fieldValues,
-  onFieldValueChange,
   isSubmitDisabled,
   onSubmit,
   validationByFieldId,
@@ -112,25 +89,12 @@ export const FormBuilderLayout = ({
   isSaveDisabled,
   isSaving,
   onSaveRequest,
-  onConnectorTypeChange,
-  onConnectorChange,
-  onConnectorLabelChange,
-  onConnectorTemplateChange,
-  onConnectorAdd,
-  onConnectorRemove,
-  onFieldChange,
-  onFieldRemove,
-  onAddField,
-  onFieldReorder,
-  onTitleChange,
-  onDescriptionChange,
-  onShowTitleChange,
-  onShowDescriptionChange,
-  onLayoutColumnsChange,
-  onRequireConfirmationChange,
-}: FormBuilderLayoutProps) => (
-  <>
-    {isSubmitConfirmationVisible ? (
+}: FormBuilderLayoutProps) => {
+  const { formConfig, fieldValues, handleFieldValueChange } = useFormBuilderContext();
+
+  return (
+    <>
+      {isSubmitConfirmationVisible ? (
       <EuiOverlayMask>
         <EuiConfirmModal
           title={i18n.translate('customizableForm.builder.executeConfirmModalTitle', {
@@ -159,7 +123,7 @@ export const FormBuilderLayout = ({
           <ConnectorSummaryTable items={connectorSummaryItems} />
         </EuiConfirmModal>
       </EuiOverlayMask>
-    ) : null}
+      ) : null}
 
     <div
       style={{
@@ -176,7 +140,7 @@ export const FormBuilderLayout = ({
               <PreviewCard
                 config={formConfig}
                 fieldValues={fieldValues}
-                onFieldValueChange={onFieldValueChange}
+                onFieldValueChange={handleFieldValueChange}
                 isSubmitDisabled={isSubmitDisabled}
                 onSubmit={onSubmit}
                 validationByFieldId={validationByFieldId}
@@ -196,23 +160,6 @@ export const FormBuilderLayout = ({
 
         <EuiFlexItem grow={2}>
           <ConfigurationPanel
-            config={formConfig}
-            onTitleChange={onTitleChange}
-            onDescriptionChange={onDescriptionChange}
-            onShowTitleChange={onShowTitleChange}
-            onShowDescriptionChange={onShowDescriptionChange}
-            onLayoutColumnsChange={onLayoutColumnsChange}
-            onRequireConfirmationChange={onRequireConfirmationChange}
-            onConnectorTypeChange={onConnectorTypeChange}
-            onConnectorChange={onConnectorChange}
-            onConnectorLabelChange={onConnectorLabelChange}
-            onConnectorTemplateChange={onConnectorTemplateChange}
-            onConnectorAdd={onConnectorAdd}
-            onConnectorRemove={onConnectorRemove}
-            onFieldChange={onFieldChange}
-            onFieldRemove={onFieldRemove}
-            onAddField={onAddField}
-            onFieldReorder={onFieldReorder}
             variableNameValidationById={variableNameValidationById}
             hasInvalidVariableNames={hasInvalidVariableNames}
             onSaveRequest={onSaveRequest}
@@ -233,7 +180,8 @@ export const FormBuilderLayout = ({
         </EuiFlexItem>
       </EuiFlexGroup>
     </div>
-  </>
-);
+    </>
+  );
+};
 
 export default FormBuilderLayout;
