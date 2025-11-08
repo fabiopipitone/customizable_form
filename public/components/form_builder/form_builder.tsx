@@ -7,17 +7,7 @@ import {
   type SaveModalDashboardProps,
   withSuspense,
 } from '@kbn/presentation-util-plugin/public';
-import {
-  EuiButton,
-  EuiConfirmModal,
-  EuiCallOut,
-  EuiFlexGroup,
-  EuiFlexItem,
-  EuiLoadingSpinner,
-  EuiOverlayMask,
-  EuiSpacer,
-  EuiText
-} from '@elastic/eui';
+import { EuiButton, EuiCallOut, EuiLoadingSpinner, EuiSpacer } from '@elastic/eui';
 import type { ActionType } from '@kbn/actions-types';
 import type { ActionConnector } from '@kbn/alerts-ui-shared/src/common/types';
 import type { SaveResult } from '@kbn/saved-objects-plugin/public';
@@ -35,16 +25,13 @@ import {
 } from './validation';
 import { getFieldValidationResult, type FieldValidationResult } from './preview';
 import {
-  ConnectorSummaryTable,
   DEFAULT_CONNECTOR_SUMMARY_STATUS,
   type ConnectorSummaryItem,
   type ConnectorSummaryStatus,
 } from './connector_summary';
-import PreviewCard from './preview_card';
-import InfoPanel from './info_panel';
-import { ConfigurationPanel } from './configuration_panel';
 import { useConnectorsData, getCanonicalConnectorTypeId } from './use_connectors_data';
 import { useFormConfigState } from './use_form_config_state';
+import FormBuilderLayout from './form_builder_layout';
 import { executeFormConnectors } from '../../services/execute_connectors';
 import {
   createCustomizableForm,
@@ -912,113 +899,55 @@ export const CustomizableFormBuilder = ({
   }
 
   return (
-    <>
-      {isSubmitConfirmationVisible ? (
-        <EuiOverlayMask>
-          <EuiConfirmModal
-            title={i18n.translate('customizableForm.builder.executeConfirmModalTitle', {
-              defaultMessage: 'Execute connectors?',
-            })}
-            onCancel={handleCancelConnectorExecution}
-            onConfirm={handleConfirmConnectorExecution}
-            cancelButtonText={i18n.translate('customizableForm.builder.executeConfirmModalCancel', {
-              defaultMessage: 'Cancel',
-            })}
-            confirmButtonText={i18n.translate('customizableForm.builder.executeConfirmModalConfirm', {
-              defaultMessage: 'Execute connectors',
-            })}
-            defaultFocusedButton="confirm"
-            maxWidth={640}
-            style={{ width: '640px' }}
-          >
-            <EuiText size="s">
-              <p>
-                {i18n.translate('customizableForm.builder.executeConfirmModalBody', {
-                  defaultMessage: 'You are about to trigger the following connectors.',
-                })}
-              </p>
-            </EuiText>
-            <EuiSpacer size="m" />
-            <ConnectorSummaryTable items={connectorSummaryItems} />
-          </EuiConfirmModal>
-        </EuiOverlayMask>
-      ) : null}
-
-      <div
-        style={{
-          backgroundColor: '#f6f9fc',
-          minHeight: '100vh',
-          padding: '24px 32px 32px',
-          boxSizing: 'border-box',
-        }}
-      >
-        <EuiFlexGroup gutterSize="m" alignItems="stretch">
-          <EuiFlexItem grow={4}>
-            <EuiFlexGroup direction="column" gutterSize="m">
-              <EuiFlexItem grow={false}>
-                <PreviewCard
-                  config={formConfig}
-                  fieldValues={fieldValues}
-                  onFieldValueChange={handleFieldValueChange}
-                  isSubmitDisabled={isSubmitDisabled}
-                  onSubmit={handleTestSubmission}
-                  validationByFieldId={fieldValidationById}
-                  isSubmitting={isExecutingConnectors}
-                />
-              </EuiFlexItem>
-              <EuiFlexItem grow={false}>
-                <InfoPanel
-                  connectorSummaries={connectorSummaries}
-                  connectorSummaryItems={connectorSummaryItems}
-                  renderedPayloads={renderedPayloads}
-                  templateValidationByConnector={templateValidationByConnector}
-                />
-              </EuiFlexItem>
-            </EuiFlexGroup>
-          </EuiFlexItem>
-
-          <EuiFlexItem grow={2}>
-            <ConfigurationPanel
-              config={formConfig}
-              onTitleChange={(v) => updateConfig({ title: v })}
-              onDescriptionChange={(v) => updateConfig({ description: v })}
-              onShowTitleChange={(show) => updateConfig({ showTitle: show })}
-              onShowDescriptionChange={(show) => updateConfig({ showDescription: show })}
-              onLayoutColumnsChange={(cols) => updateConfig({ layoutColumns: cols })}
-              onRequireConfirmationChange={(value) =>
-                updateConfig({ requireConfirmationOnSubmit: value })
-              }
-              onConnectorTypeChange={handleConnectorTypeChange}
-              onConnectorChange={handleConnectorChange}
-              onConnectorLabelChange={handleConnectorLabelChange}
-              onConnectorTemplateChange={handleConnectorTemplateChange}
-              onConnectorAdd={addConnector}
-              onConnectorRemove={removeConnector}
-              onFieldChange={updateField}
-              onFieldRemove={removeField}
-              onAddField={addField}
-              onFieldReorder={handleFieldReorder}
-              variableNameValidationById={variableNameValidationById}
-              hasInvalidVariableNames={hasInvalidVariableNames}
-              connectorTypeOptions={connectorTypeOptions}
-              connectorTypes={connectorTypes}
-              connectorsByType={connectorsByType}
-              templateValidationByConnector={templateValidationByConnector}
-              connectorStatusById={connectorStatusById}
-              connectorSelectionState={connectorSelectionState}
-              isLoadingConnectorTypes={isLoadingConnectorTypes}
-              isLoadingConnectors={isLoadingConnectors}
-              connectorTypesError={connectorTypesError}
-              connectorsError={connectorsError}
-              hasEmptyConnectorLabels={hasEmptyConnectorLabels}
-              isSaveDisabled={isSaveDisabled}
-              isSaving={isSaving}
-              onSaveRequest={handleSaveVisualizationRequest}
-            />
-          </EuiFlexItem>
-        </EuiFlexGroup>
-      </div>
-    </>
+    <FormBuilderLayout
+      formConfig={formConfig}
+      fieldValues={fieldValues}
+      onFieldValueChange={handleFieldValueChange}
+      isSubmitDisabled={isSubmitDisabled}
+      onSubmit={handleTestSubmission}
+      validationByFieldId={fieldValidationById}
+      isSubmitting={isExecutingConnectors}
+      connectorSummaries={connectorSummaries}
+      connectorSummaryItems={connectorSummaryItems}
+      renderedPayloads={renderedPayloads}
+      templateValidationByConnector={templateValidationByConnector}
+      isSubmitConfirmationVisible={isSubmitConfirmationVisible}
+      onConfirmConnectorExecution={handleConfirmConnectorExecution}
+      onCancelConnectorExecution={handleCancelConnectorExecution}
+      connectorTypeOptions={connectorTypeOptions}
+      connectorTypes={connectorTypes}
+      connectorsByType={connectorsByType}
+      connectorStatusById={connectorStatusById}
+      connectorSelectionState={connectorSelectionState}
+      isLoadingConnectorTypes={isLoadingConnectorTypes}
+      isLoadingConnectors={isLoadingConnectors}
+      connectorTypesError={connectorTypesError}
+      connectorsError={connectorsError}
+      hasEmptyConnectorLabels={hasEmptyConnectorLabels}
+      variableNameValidationById={variableNameValidationById}
+      hasInvalidVariableNames={hasInvalidVariableNames}
+      isSaveDisabled={isSaveDisabled}
+      isSaving={isSaving}
+      onSaveRequest={handleSaveVisualizationRequest}
+      onConnectorTypeChange={handleConnectorTypeChange}
+      onConnectorChange={handleConnectorChange}
+      onConnectorLabelChange={handleConnectorLabelChange}
+      onConnectorTemplateChange={handleConnectorTemplateChange}
+      onConnectorAdd={addConnector}
+      onConnectorRemove={removeConnector}
+      onFieldChange={updateField}
+      onFieldRemove={removeField}
+      onAddField={addField}
+      onFieldReorder={handleFieldReorder}
+      onTitleChange={(value) => updateConfig({ title: value })}
+      onDescriptionChange={(value) => updateConfig({ description: value })}
+      onShowTitleChange={(value) => updateConfig({ showTitle: value })}
+      onShowDescriptionChange={(value) => updateConfig({ showDescription: value })}
+      onLayoutColumnsChange={(value) => updateConfig({ layoutColumns: value })}
+      onRequireConfirmationChange={(value) =>
+        updateConfig({ requireConfirmationOnSubmit: value })
+      }
+    />
   );
 };
 
