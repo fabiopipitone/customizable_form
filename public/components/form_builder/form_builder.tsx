@@ -19,18 +19,11 @@ import {
   SupportedConnectorTypeId,
 } from './types';
 import { DEFAULT_LAYOUT_COLUMNS, DEFAULT_STRING_SIZE } from './constants';
-import {
-  validateVariableName,
-  type VariableNameValidationResult,
-} from './validation';
-import { getFieldValidationResult, type FieldValidationResult } from './preview';
-import {
-  DEFAULT_CONNECTOR_SUMMARY_STATUS,
-  type ConnectorSummaryItem,
-  type ConnectorSummaryStatus,
-} from './connector_summary';
 import { useConnectorsData, getCanonicalConnectorTypeId } from './use_connectors_data';
 import { useFormConfigState } from './use_form_config_state';
+import { useFieldValidation } from './hooks/use_field_validation';
+import { usePayloadTemplates } from './hooks/use_payload_templates';
+import { useConnectorState } from './hooks/use_connector_state';
 import { FormBuilderProvider } from './form_builder_context';
 import FormBuilderLayout from './form_builder_layout';
 import { executeFormConnectors } from '../../services/execute_connectors';
@@ -156,28 +149,6 @@ const buildInitialFieldValues = (fields: FormFieldConfig[]): Record<string, stri
 const toConnectorTypeOptions = (types: Array<ActionType & { id: SupportedConnectorTypeId }>) =>
   types.map((type) => ({ value: type.id, text: type.name }));
 
-const getTemplateVariables = (template: string): string[] => {
-  const variables = new Set<string>();
-  template.replace(/{{\s*([^{}\s]+)\s*}}/g, (_, variable: string) => {
-    const trimmed = variable.trim();
-    if (trimmed) {
-      variables.add(trimmed);
-    }
-    return '';
-  });
-  return Array.from(variables);
-};
-
-type ConnectorStatus = ConnectorSummaryStatus;
-const DEFAULT_CONNECTOR_STATUS: ConnectorStatus = DEFAULT_CONNECTOR_SUMMARY_STATUS;
-
-type ConnectorSelectionStateEntry = {
-  connectorsForType: Array<ActionConnector & { actionTypeId: SupportedConnectorTypeId }>;
-  availableConnectors: Array<ActionConnector & { actionTypeId: SupportedConnectorTypeId }>;
-  hasType: boolean;
-  hasSelection: boolean;
-};
-
 export const CustomizableFormBuilder = ({
   mode,
   savedObjectId: initialSavedObjectId,
@@ -216,11 +187,11 @@ export const CustomizableFormBuilder = ({
   const [isExecutingConnectors, setIsExecutingConnectors] = useState<boolean>(false);
   const [isSubmitConfirmationVisible, setIsSubmitConfirmationVisible] = useState<boolean>(false);
 
-  const { toasts } = notifications;
-  const {
-    connectorTypes,
-    connectors,
-    isLoadingConnectorTypes,
+const { toasts } = notifications;
+const {
+  connectorTypes,
+  connectors,
+  isLoadingConnectorTypes,
     isLoadingConnectors,
     connectorTypesError,
     connectorsError,
@@ -228,6 +199,20 @@ export const CustomizableFormBuilder = ({
   const [fieldValues, setFieldValues] = useState<Record<string, string>>(() =>
     buildInitialFieldValues(INITIAL_CONFIG.fields)
   );
+  const { fieldValidationById, variableNameValidationById, hasFieldValidationWarnings, hasInvalidVariableNames } =
+    useFieldValidation({ formConfig, fieldValues });
+  const { renderedPayloads, templateValidationByConnector } = usePayloadTemplates({
+    formConfig,
+    fieldValues,
+  });
+  const { connectorSelectionState, connectorStatusById, connectorSummaries, connectorSummaryItems } =
+    useConnectorState({
+      formConfig,
+      connectorTypes,
+      connectors,
+      isLoadingConnectors,
+      templateValidationByConnector,
+    });
 
   const addConnector = useCallback(() => {
     addConnectorInternal({
@@ -377,141 +362,6 @@ export const CustomizableFormBuilder = ({
     );
   }, [connectors]);
 
-  const fieldKeys = useMemo(() => {
-    return formConfig.fields
-      .map((field) => field.key.trim())
-      .filter((key) => key.length > 0);
-  }, [formConfig.fields]);
-
-  const connectorSelectionState = useMemo(() => {
-    const state: Record<string, ConnectorSelectionStateEntry> = {};
-
-    formConfig.connectors.forEach((connectorConfig) => {
-      const connectorsForType = connectorConfig.connectorTypeId
-        ? connectors.filter((connector) => connector.actionTypeId === connectorConfig.connectorTypeId)
-        : [];
-
-      const takenConnectorIds = new Set(
-        formConfig.connectors
-          .filter((item) => item.id !== connectorConfig.id)
-          .map((item) => item.connectorId)
-          .filter((id): id is string => Boolean(id))
-      );
-
-      const availableConnectors = connectorsForType.filter(
-        (connector) => connector.id === connectorConfig.connectorId || !takenConnectorIds.has(connector.id)
-      );
-
-      const hasType = Boolean(connectorConfig.connectorTypeId);
-      const hasSelection =
-        hasType &&
-        Boolean(connectorConfig.connectorId) &&
-        availableConnectors.some((connector) => connector.id === connectorConfig.connectorId);
-
-      state[connectorConfig.id] = {
-        connectorsForType,
-        availableConnectors,
-        hasType,
-        hasSelection,
-      };
-    });
-
-    return state;
-  }, [formConfig.connectors, connectors]);
-
-  const templateValidationByConnector = useMemo(() => {
-    const definedKeys = new Set(fieldKeys);
-    return formConfig.connectors.reduce<Record<string, { missing: string[]; unused: Array<{ key: string; label: string }> }>>(
-      (acc, connectorConfig) => {
-        const variables = getTemplateVariables(connectorConfig.documentTemplate);
-        const missing = variables.filter((variable) => !definedKeys.has(variable));
-        const usedVariables = new Set(variables);
-        const unused = formConfig.fields
-          .map((field) => {
-            const key = field.key.trim();
-            if (!key || usedVariables.has(key)) {
-              return null;
-            }
-            return {
-              key,
-              label: field.label?.trim() || key,
-            };
-          })
-          .filter((field): field is { key: string; label: string } => field !== null);
-
-        acc[connectorConfig.id] = {
-          missing,
-          unused,
-        };
-        return acc;
-      },
-      {}
-    );
-  }, [formConfig.connectors, formConfig.fields, fieldKeys]);
-
-  const connectorStatusById = useMemo(() => {
-    const status: Record<string, ConnectorStatus> = {};
-
-    formConfig.connectors.forEach((connectorConfig) => {
-      const selection = connectorSelectionState[connectorConfig.id];
-      const validation = templateValidationByConnector[connectorConfig.id] ?? {
-        missing: [],
-        unused: [],
-      };
-
-      const hasLabelError = !(connectorConfig.label || '').trim();
-      const hasType = selection?.hasType ?? false;
-      const hasSelection = selection?.hasSelection ?? false;
-      const availableCount = selection?.availableConnectors.length ?? 0;
-
-      const hasSelectionWarning =
-        !isLoadingConnectors && hasType && availableCount === 0;
-      const hasSelectionError = hasType && !hasSelection;
-      const hasTypeError = !hasType;
-
-      const hasWarning = hasSelectionWarning;
-      const hasError = hasLabelError || hasSelectionError || hasTypeError;
-
-      const hasTemplateError = validation.missing.length > 0;
-      const hasTemplateWarning = validation.unused.length > 0;
-
-      status[connectorConfig.id] = {
-        hasWarning,
-        hasError,
-        hasTemplateWarning,
-        hasTemplateError,
-      };
-    });
-
-    return status;
-  }, [formConfig.connectors, connectorSelectionState, templateValidationByConnector, isLoadingConnectors]);
-
-  const fieldValidationById = useMemo(() => {
-    const map: Record<string, FieldValidationResult> = {};
-    formConfig.fields.forEach((field) => {
-      map[field.id] = getFieldValidationResult(field, fieldValues[field.id] ?? '');
-    });
-    return map;
-  }, [formConfig.fields, fieldValues]);
-
-  const variableNameValidationById = useMemo(() => {
-    const trimmedNames = formConfig.fields.map((field) => field.key.trim());
-    return formConfig.fields.reduce<Record<string, VariableNameValidationResult>>(
-      (acc, field) => {
-        acc[field.id] = validateVariableName({ value: field.key, existingNames: trimmedNames });
-        return acc;
-      },
-      {}
-    );
-  }, [formConfig.fields]);
-
-  const hasFieldValidationWarnings = useMemo(
-    () =>
-      Object.values(fieldValidationById).some((result) => result.isOutOfRange) ||
-      Object.values(variableNameValidationById).some((result) => !result.isValid),
-    [fieldValidationById, variableNameValidationById]
-  );
-
   const isSubmitDisabled = useMemo(
     () =>
       formConfig.fields.some(
@@ -519,27 +369,6 @@ export const CustomizableFormBuilder = ({
       ) || hasFieldValidationWarnings,
     [formConfig.fields, fieldValues, hasFieldValidationWarnings]
   );
-
-  const renderedPayloads = useMemo(() => {
-    const valueMap = formConfig.fields.reduce<Record<string, string>>((acc, field) => {
-      if (field.key) {
-        acc[field.key.trim()] = fieldValues[field.id] ?? '';
-      }
-      return acc;
-    }, {});
-
-    return formConfig.connectors.reduce<Record<string, string>>((acc, connectorConfig) => {
-      const rendered = connectorConfig.documentTemplate.replace(
-        /{{\s*([^{}\s]+)\s*}}/g,
-        (_, variable: string) => {
-          const trimmed = variable.trim();
-          return valueMap[trimmed] ?? '';
-        }
-      );
-      acc[connectorConfig.id] = rendered;
-      return acc;
-    }, {});
-  }, [formConfig.connectors, formConfig.fields, fieldValues]);
 
   const hasEmptyConnectorLabels = useMemo(
     () => formConfig.connectors.some((connectorConfig) => !(connectorConfig.label || '').trim()),
@@ -680,11 +509,6 @@ export const CustomizableFormBuilder = ({
     );
   }, [application, formConfig, history, http, savedObjectAttributes, savedObjectId, toasts]);
 
-  const hasInvalidVariableNames = useMemo(
-    () => Object.values(variableNameValidationById).some((result) => !result.isValid),
-    [variableNameValidationById]
-  );
-
   const isSaveDisabled = useMemo(
     () =>
       hasEmptyConnectorLabels ||
@@ -703,52 +527,13 @@ export const CustomizableFormBuilder = ({
     ]
   );
 
-  const connectorSummaries = useMemo(
-    () =>
-      formConfig.connectors.map((connectorConfig, index) => ({
-        config: connectorConfig,
-        type: connectorTypes.find((type) => type.id === connectorConfig.connectorTypeId) ?? null,
-        connector:
-          connectors.find((connectorInstance) => connectorInstance.id === connectorConfig.connectorId) ??
-          null,
-        label: (connectorConfig.label || '').trim() || getConnectorFallbackLabel(index),
-        status: connectorStatusById[connectorConfig.id] ?? DEFAULT_CONNECTOR_STATUS,
-      })),
-    [formConfig.connectors, connectorTypes, connectors, connectorStatusById]
-  );
-
-  const connectorSummaryItems = useMemo<ConnectorSummaryItem[]>(() => {
-    return connectorSummaries.map((summary, index) => {
-      const connectorName =
-        summary.connector?.name ??
-        i18n.translate('customizableForm.builder.connectorSummary.connectorFallback', {
-          defaultMessage: 'Unnamed connector {index}',
-          values: { index: index + 1 },
-        });
-      const rawTypeLabel =
-        summary.type?.name ??
-        summary.connector?.actionTypeId ??
-        summary.config.connectorTypeId;
-      const typeLabel =
-        rawTypeLabel && rawTypeLabel.trim().length > 0 ? rawTypeLabel : '—';
-
-      return {
-        id: summary.config.id,
-        label: summary.label,
-        connectorName,
-        connectorTypeLabel: typeLabel,
-        status: summary.status,
-      };
-    });
-  }, [connectorSummaries]);
-
   const connectorLabelsById = useMemo(() => {
     const labels: Record<string, string> = {};
-    formConfig.connectors.forEach((connector, index) => {
-      labels[connector.id] = (connector.label || '').trim() || getConnectorFallbackLabel(index);
+    connectorSummaries.forEach((summary) => {
+      labels[summary.config.id] = summary.label;
     });
     return labels;
-  }, [formConfig.connectors]);
+  }, [connectorSummaries]);
 
   const executeConnectorsNow = useCallback(async () => {
     if (formConfig.connectors.length === 0) {

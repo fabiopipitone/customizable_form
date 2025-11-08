@@ -16,11 +16,7 @@ import { initializeTitleManager, titleComparators } from '@kbn/presentation-publ
 
 import { CUSTOMIZABLE_FORM_EMBEDDABLE_TYPE, PLUGIN_ID, PLUGIN_NAME } from '../../common';
 import type { FormConfig } from '../components/form_builder/types';
-import {
-  CustomizableFormPreview,
-  getFieldValidationResult,
-  type FieldValidationResult,
-} from '../components/form_builder/preview';
+import { CustomizableFormPreview } from '../components/form_builder/preview';
 import {
   resolveCustomizableForm,
   getDocumentFromResolveResponse,
@@ -33,13 +29,14 @@ import type {
   CustomizableFormEmbeddableSerializedState,
 } from './types';
 import { executeFormConnectors } from '../services/execute_connectors';
-import { validateVariableName } from '../components/form_builder/validation';
 import {
   ConnectorSummaryTable,
   DEFAULT_CONNECTOR_SUMMARY_STATUS,
   type ConnectorSummaryItem,
   type ConnectorSummaryStatus,
 } from '../components/form_builder/connector_summary';
+import { useFieldValidation } from '../components/form_builder/hooks/use_field_validation';
+import { usePayloadTemplates } from '../components/form_builder/hooks/use_payload_templates';
 
 const buildInitialFieldValues = (config: FormConfig): Record<string, string> =>
   config.fields.reduce<Record<string, string>>((acc, field) => {
@@ -261,64 +258,20 @@ export const getCustomizableFormEmbeddableFactory = ({
           });
         }, []);
 
-        const renderedPayloads = useMemo(() => {
-          if (!document) {
-            return {} as Record<string, string>;
-          }
+        const formConfig = document?.formConfig ?? null;
+        const { renderedPayloads } = usePayloadTemplates({
+          formConfig,
+          fieldValues,
+        });
 
-          const valueMap = document.formConfig.fields.reduce<Record<string, string>>((acc, field) => {
-            acc[field.key.trim()] = fieldValues[field.id] ?? '';
-            return acc;
-          }, {});
-
-          return document.formConfig.connectors.reduce<Record<string, string>>((acc, connectorConfig) => {
-            const rendered = connectorConfig.documentTemplate.replace(
-              /{{\s*([^{}\s]+)\s*}}/g,
-              (_, variable: string) => {
-                const trimmed = variable.trim();
-                return valueMap[trimmed] ?? '';
-              }
-            );
-            acc[connectorConfig.id] = rendered;
-            return acc;
-          }, {});
-        }, [document, fieldValues]);
-
-        const fieldValidationById = useMemo(() => {
-          if (!document) {
-            return {} as Record<string, FieldValidationResult>;
-          }
-          const map: Record<string, FieldValidationResult> = {};
-          document.formConfig.fields.forEach((field) => {
-            map[field.id] = getFieldValidationResult(field, fieldValues[field.id] ?? '');
-          });
-          return map;
-        }, [document, fieldValues]);
-
-        const hasFieldValidationWarnings = useMemo(
-          () => Object.values(fieldValidationById).some((result) => result.isOutOfRange),
-          [fieldValidationById]
-        );
-
-        const variableNameValidationById = useMemo(() => {
-          if (!document) {
-            return {} as Record<string, ReturnType<typeof validateVariableName>>;
-          }
-          const trimmedNames = document.formConfig.fields.map((field) => field.key.trim());
-          return document.formConfig.fields.reduce<Record<string, ReturnType<typeof validateVariableName>>>(
-            (acc, field) => {
-              acc[field.id] = validateVariableName({ value: field.key, existingNames: trimmedNames });
-              return acc;
-            },
-            {}
-          );
-        }, [document]);
-
-        const hasInvalidVariableNames = useMemo(
-          () =>
-            Object.values(variableNameValidationById).some((result) => !result.isValid),
-          [variableNameValidationById]
-        );
+        const {
+          fieldValidationById,
+          hasFieldValidationWarnings,
+          hasInvalidVariableNames,
+        } = useFieldValidation({
+          formConfig,
+          fieldValues,
+        });
 
         const connectorLabelsById = useMemo(() => {
           if (!document) {

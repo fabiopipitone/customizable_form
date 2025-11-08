@@ -16,13 +16,7 @@ import InfoPanel from './info_panel';
 import { ConfigurationPanel } from './configuration_panel';
 import { ConnectorSummaryTable } from './connector_summary';
 import { useFormBuilderContext } from './form_builder_context';
-
-interface ConnectorSelectionStateEntry {
-  connectorsForType: Array<ActionConnector & { actionTypeId: SupportedConnectorTypeId }>;
-  availableConnectors: Array<ActionConnector & { actionTypeId: SupportedConnectorTypeId }>;
-  hasType: boolean;
-  hasSelection: boolean;
-}
+import type { ConnectorSelectionStateEntry } from './hooks/use_connector_state';
 
 export interface FormBuilderLayoutProps {
   isSubmitDisabled: boolean;

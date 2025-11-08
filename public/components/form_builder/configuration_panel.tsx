@@ -49,6 +49,7 @@ import {
   VARIABLE_NAME_RULES,
   type VariableNameValidationResult,
 } from './validation';
+import type { ConnectorSelectionStateEntry } from './hooks/use_connector_state';
 import { useFormBuilderContext } from './form_builder_context';
 
 const fieldDragHandleStyles = css`
@@ -83,13 +84,6 @@ type ConnectorStatus = {
   hasError: boolean;
   hasTemplateWarning: boolean;
   hasTemplateError: boolean;
-};
-
-type ConnectorSelectionStateEntry = {
-  connectorsForType: Array<ActionConnector & { actionTypeId: SupportedConnectorTypeId }>;
-  availableConnectors: Array<ActionConnector & { actionTypeId: SupportedConnectorTypeId }>;
-  hasType: boolean;
-  hasSelection: boolean;
 };
 
 const DEFAULT_CONNECTOR_STATUS: ConnectorStatus = {
