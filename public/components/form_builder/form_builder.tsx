@@ -9,7 +9,6 @@ import {
 } from '@kbn/presentation-util-plugin/public';
 import { EuiButton, EuiCallOut, EuiLoadingSpinner, EuiSpacer } from '@elastic/eui';
 import type { ActionType } from '@kbn/actions-types';
-import type { ActionConnector } from '@kbn/alerts-ui-shared/src/common/types';
 import type { SaveResult } from '@kbn/saved-objects-plugin/public';
 
 import {
@@ -349,18 +348,6 @@ const {
   }, []);
 
   const connectorTypeOptions = useMemo(() => toConnectorTypeOptions(connectorTypes), [connectorTypes]);
-
-  const connectorsByType = useMemo(() => {
-    return connectors.reduce<Record<string, Array<ActionConnector & { actionTypeId: SupportedConnectorTypeId }>>>(
-      (acc, connector) => {
-        const list = acc[connector.actionTypeId] ?? [];
-        list.push(connector);
-        acc[connector.actionTypeId] = list;
-        return acc;
-      },
-      {}
-    );
-  }, [connectors]);
 
   const isSubmitDisabled = useMemo(
     () =>
@@ -735,7 +722,6 @@ const {
         onCancelConnectorExecution={handleCancelConnectorExecution}
         connectorTypeOptions={connectorTypeOptions}
         connectorTypes={connectorTypes}
-        connectorsByType={connectorsByType}
         connectorStatusById={connectorStatusById}
         connectorSelectionState={connectorSelectionState}
         isLoadingConnectorTypes={isLoadingConnectorTypes}

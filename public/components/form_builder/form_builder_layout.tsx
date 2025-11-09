@@ -41,7 +41,6 @@ export interface FormBuilderLayoutProps {
   onCancelConnectorExecution: () => void;
   connectorTypeOptions: Array<{ value: string; text: string }>;
   connectorTypes: Array<ActionType & { id: SupportedConnectorTypeId }>;
-  connectorsByType: Record<string, Array<ActionConnector & { actionTypeId: SupportedConnectorTypeId }>>;
   connectorStatusById: Record<string, ConnectorSummaryStatus>;
   connectorSelectionState: Record<string, ConnectorSelectionStateEntry>;
   isLoadingConnectorTypes: boolean;
@@ -70,7 +69,6 @@ export const FormBuilderLayout = ({
   onCancelConnectorExecution,
   connectorTypeOptions,
   connectorTypes,
-  connectorsByType,
   connectorStatusById,
   connectorSelectionState,
   isLoadingConnectorTypes,
@@ -159,9 +157,9 @@ export const FormBuilderLayout = ({
             onSaveRequest={onSaveRequest}
             connectorTypeOptions={connectorTypeOptions}
             connectorTypes={connectorTypes}
-            connectorsByType={connectorsByType}
             templateValidationByConnector={templateValidationByConnector}
             connectorStatusById={connectorStatusById}
+            connectorSummaries={connectorSummaries}
             connectorSelectionState={connectorSelectionState}
             isLoadingConnectorTypes={isLoadingConnectorTypes}
             isLoadingConnectors={isLoadingConnectors}
