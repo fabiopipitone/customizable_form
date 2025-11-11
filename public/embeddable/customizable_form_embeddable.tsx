@@ -28,7 +28,6 @@ import type {
   CustomizableFormEmbeddableApi,
   CustomizableFormEmbeddableSerializedState,
 } from './types';
-import { executeFormConnectors } from '../services/execute_connectors';
 import {
   ConnectorSummaryTable,
   DEFAULT_CONNECTOR_SUMMARY_STATUS,
@@ -37,6 +36,7 @@ import {
 } from '../components/form_builder/connector_summary';
 import { useFieldValidation } from '../components/form_builder/hooks/use_field_validation';
 import { usePayloadTemplates } from '../components/form_builder/hooks/use_payload_templates';
+import { useConnectorExecution } from '../components/form_builder/hooks/use_connector_execution';
 
 const buildInitialFieldValues = (config: FormConfig): Record<string, string> =>
   config.fields.reduce<Record<string, string>>((acc, field) => {
@@ -174,7 +174,6 @@ export const getCustomizableFormEmbeddableFactory = ({
         const [fieldValues, setFieldValues] = useState<Record<string, string>>(
           initialDocument ? buildInitialFieldValues(initialDocument.formConfig) : {}
         );
-        const [isSubmitting, setIsSubmitting] = useState(false);
         const [isSubmitConfirmationVisible, setIsSubmitConfirmationVisible] = useState(false);
         const [isLoading, setIsLoading] = useState<boolean>(
           hasSavedObjectReference && !initialDocument
@@ -339,6 +338,14 @@ export const getCustomizableFormEmbeddableFactory = ({
           });
         }, [document]);
 
+        const connectorExecution = useConnectorExecution({
+          http,
+          toasts,
+          formConfig: document ? document.formConfig : null,
+          renderedPayloads,
+          connectorLabelsById,
+        });
+
         const isSubmitDisabled = useMemo(() => {
           if (!document) {
             return true;
@@ -356,95 +363,18 @@ export const getCustomizableFormEmbeddableFactory = ({
             hasEmptyRequired ||
             hasFieldValidationWarnings ||
             hasInvalidVariableNames ||
-            isSubmitting
+            connectorExecution.isExecuting
           );
         }, [
           document,
           fieldValues,
           hasFieldValidationWarnings,
           hasInvalidVariableNames,
-          isSubmitting,
-        ]);
-
-        const executeConnectorsNow = useCallback(async () => {
-          if (!document || isSubmitting) {
-            return;
-          }
-
-          if (document.formConfig.connectors.length === 0) {
-            toasts.addWarning({
-              title: i18n.translate('customizableForm.embeddable.executeConnectors.noConnectorsTitle', {
-                defaultMessage: 'No connectors configured',
-              }),
-              text: i18n.translate('customizableForm.embeddable.executeConnectors.noConnectorsBody', {
-                defaultMessage: 'Add at least one connector in the form configuration to submit.',
-              }),
-            });
-            return;
-          }
-
-          setIsSubmitting(true);
-
-          try {
-            const results = await executeFormConnectors({
-              http,
-              connectors: document.formConfig.connectors,
-              renderedPayloads,
-            });
-
-            const successes = results.filter((result) => result.status === 'success');
-            const errors = results.filter((result) => result.status === 'error');
-
-            successes.forEach((result) => {
-              const label =
-                connectorLabelsById[result.connector.id] ?? result.connector.label ?? result.connector.id;
-              toasts.addSuccess({
-                title: i18n.translate('customizableForm.embeddable.executeConnectors.successTitle', {
-                  defaultMessage: 'Connector executed',
-                }),
-                text: i18n.translate('customizableForm.embeddable.executeConnectors.successBody', {
-                  defaultMessage: '{label} executed successfully.',
-                  values: { label },
-                }),
-              });
-            });
-
-            errors.forEach((result) => {
-              const label =
-                connectorLabelsById[result.connector.id] ?? result.connector.label ?? result.connector.id;
-              toasts.addDanger({
-                title: i18n.translate('customizableForm.embeddable.executeConnectors.errorTitle', {
-                  defaultMessage: 'Connector execution failed',
-                }),
-                text:
-                  result.message ??
-                  i18n.translate('customizableForm.embeddable.executeConnectors.errorBody', {
-                    defaultMessage: 'Unable to execute {label}.',
-                    values: { label },
-                  }),
-              });
-            });
-          } catch (error) {
-            toasts.addDanger({
-              title: i18n.translate('customizableForm.embeddable.executeConnectors.unexpectedErrorTitle', {
-                defaultMessage: 'Submit failed',
-              }),
-              text: getErrorMessage(error),
-            });
-          } finally {
-            setIsSubmitting(false);
-          }
-        }, [
-          document,
-          isSubmitting,
-          http,
-          renderedPayloads,
-          connectorLabelsById,
-          toasts,
+          connectorExecution.isExecuting,
         ]);
 
         const handleSubmit = useCallback(() => {
-          if (!document || isSubmitting) {
+          if (!document || connectorExecution.isExecuting) {
             return;
           }
 
@@ -465,18 +395,17 @@ export const getCustomizableFormEmbeddableFactory = ({
             return;
           }
 
-          executeConnectorsNow();
+          connectorExecution.executeNow();
         }, [
           document,
-          executeConnectorsNow,
-          isSubmitting,
+          connectorExecution,
           toasts,
         ]);
 
         const handleConfirmConnectorExecution = useCallback(() => {
           setIsSubmitConfirmationVisible(false);
-          executeConnectorsNow();
-        }, [executeConnectorsNow]);
+          connectorExecution.executeNow();
+        }, [connectorExecution]);
 
         const handleCancelConnectorExecution = useCallback(() => {
           setIsSubmitConfirmationVisible(false);
@@ -576,7 +505,7 @@ export const getCustomizableFormEmbeddableFactory = ({
                 isSubmitDisabled={isSubmitDisabled}
                 onSubmit={handleSubmit}
                 validationByFieldId={fieldValidationById}
-                isSubmitting={isSubmitting}
+                isSubmitting={connectorExecution.isExecuting}
               />
               <EuiSpacer size="s" />
             </div>

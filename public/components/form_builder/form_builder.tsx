@@ -23,9 +23,9 @@ import { useFormConfigState } from './use_form_config_state';
 import { useFieldValidation } from './hooks/use_field_validation';
 import { usePayloadTemplates } from './hooks/use_payload_templates';
 import { useConnectorState } from './hooks/use_connector_state';
+import { useConnectorExecution } from './hooks/use_connector_execution';
 import { FormBuilderProvider } from './form_builder_context';
 import FormBuilderLayout from './form_builder_layout';
-import { executeFormConnectors } from '../../services/execute_connectors';
 import {
   createCustomizableForm,
   updateCustomizableForm,
@@ -183,7 +183,6 @@ export const CustomizableFormBuilder = ({
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(mode === 'edit');
   const [initialLoadError, setInitialLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [isExecutingConnectors, setIsExecutingConnectors] = useState<boolean>(false);
   const [isSubmitConfirmationVisible, setIsSubmitConfirmationVisible] = useState<boolean>(false);
 
 const { toasts } = notifications;
@@ -348,14 +347,6 @@ const {
   }, []);
 
   const connectorTypeOptions = useMemo(() => toConnectorTypeOptions(connectorTypes), [connectorTypes]);
-
-  const isSubmitDisabled = useMemo(
-    () =>
-      formConfig.fields.some(
-        (field) => field.required && !(fieldValues[field.id]?.trim())
-      ) || hasFieldValidationWarnings,
-    [formConfig.fields, fieldValues, hasFieldValidationWarnings]
-  );
 
   const hasEmptyConnectorLabels = useMemo(
     () => formConfig.connectors.some((connectorConfig) => !(connectorConfig.label || '').trim()),
@@ -522,80 +513,24 @@ const {
     return labels;
   }, [connectorSummaries]);
 
-  const executeConnectorsNow = useCallback(async () => {
-    if (formConfig.connectors.length === 0) {
-      toasts.addWarning({
-        title: i18n.translate('customizableForm.builder.executeConnectors.noConnectorsTitle', {
-          defaultMessage: 'No connectors configured',
-        }),
-        text: i18n.translate('customizableForm.builder.executeConnectors.noConnectorsBody', {
-          defaultMessage: 'Add at least one connector before submitting the form.',
-        }),
-      });
-      return;
-    }
-
-    setIsExecutingConnectors(true);
-
-    try {
-      const results = await executeFormConnectors({
-        http,
-        connectors: formConfig.connectors,
-        renderedPayloads,
-      });
-
-      const successes = results.filter((result) => result.status === 'success');
-      const errors = results.filter((result) => result.status === 'error');
-
-      successes.forEach((result) => {
-        const label =
-          connectorLabelsById[result.connector.id] ?? result.connector.label ?? result.connector.id;
-        toasts.addSuccess({
-          title: i18n.translate('customizableForm.builder.executeConnectors.successTitle', {
-            defaultMessage: 'Connector executed',
-          }),
-          text: i18n.translate('customizableForm.builder.executeConnectors.successBody', {
-            defaultMessage: '{label} executed successfully.',
-            values: { label },
-          }),
-        });
-      });
-
-      errors.forEach((result) => {
-        const label =
-          connectorLabelsById[result.connector.id] ?? result.connector.label ?? result.connector.id;
-        toasts.addDanger({
-          title: i18n.translate('customizableForm.builder.executeConnectors.errorTitle', {
-            defaultMessage: 'Connector execution failed',
-          }),
-          text:
-            result.message ??
-            i18n.translate('customizableForm.builder.executeConnectors.errorBody', {
-              defaultMessage: 'Unable to execute {label}.',
-              values: { label },
-            }),
-        });
-      });
-    } catch (error) {
-      toasts.addDanger({
-        title: i18n.translate('customizableForm.builder.executeConnectors.unexpectedErrorTitle', {
-          defaultMessage: 'Submit failed',
-        }),
-        text: getErrorMessage(error),
-      });
-    } finally {
-      setIsExecutingConnectors(false);
-    }
-  }, [
-    formConfig.connectors,
-    connectorLabelsById,
+  const connectorExecution = useConnectorExecution({
     http,
-    renderedPayloads,
     toasts,
-  ]);
+    formConfig,
+    renderedPayloads,
+    connectorLabelsById,
+  });
+
+  const isSubmitDisabled = useMemo(
+    () =>
+      formConfig.fields.some((field) => field.required && !(fieldValues[field.id]?.trim())) ||
+      hasFieldValidationWarnings ||
+      connectorExecution.isExecuting,
+    [formConfig.fields, fieldValues, hasFieldValidationWarnings, connectorExecution.isExecuting]
+  );
 
   const handleTestSubmission = useCallback(() => {
-    if (formConfig.connectors.length === 0) {
+    if (!formConfig || formConfig.connectors.length === 0) {
       toasts.addWarning({
         title: i18n.translate('customizableForm.builder.executeConnectors.noConnectorsTitle', {
           defaultMessage: 'No connectors configured',
@@ -612,13 +547,13 @@ const {
       return;
     }
 
-    executeConnectorsNow();
-  }, [executeConnectorsNow, formConfig.connectors, formConfig.requireConfirmationOnSubmit, toasts]);
+    connectorExecution.executeNow();
+  }, [connectorExecution, formConfig, toasts]);
 
   const handleConfirmConnectorExecution = useCallback(() => {
     setIsSubmitConfirmationVisible(false);
-    executeConnectorsNow();
-  }, [executeConnectorsNow]);
+    connectorExecution.executeNow();
+  }, [connectorExecution]);
 
   const handleCancelConnectorExecution = useCallback(() => {
     setIsSubmitConfirmationVisible(false);
@@ -712,7 +647,7 @@ const {
         isSubmitDisabled={isSubmitDisabled}
         onSubmit={handleTestSubmission}
         validationByFieldId={fieldValidationById}
-        isSubmitting={isExecutingConnectors}
+        isSubmitting={connectorExecution.isExecuting}
         connectorSummaries={connectorSummaries}
         connectorSummaryItems={connectorSummaryItems}
         renderedPayloads={renderedPayloads}
