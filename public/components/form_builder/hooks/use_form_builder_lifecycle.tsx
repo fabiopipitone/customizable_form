@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { i18n } from '@kbn/i18n';
 import type { AppMountParameters, CoreStart, NotificationsStart } from '@kbn/core/public';
 import { showSaveModal } from '@kbn/saved-objects-plugin/public';
@@ -22,6 +22,10 @@ import {
 import { buildInitialFieldValues, DEFAULT_PAYLOAD_TEMPLATE, getErrorMessage } from '../utils/form_helpers';
 import { CUSTOMIZABLE_FORM_EMBEDDABLE_TYPE } from '../../../../common';
 import { getEmbeddableStateTransfer } from '../../../services/embeddable_state_transfer';
+import { useFieldValidation } from './use_field_validation';
+import { usePayloadTemplates } from './use_payload_templates';
+import { useConnectorState } from './use_connector_state';
+import type { FormBuilderContextValue } from '../form_builder_context';
 
 const SavedObjectSaveModalDashboard = withSuspense(LazySavedObjectSaveModalDashboard);
 
@@ -353,21 +357,94 @@ export const useFormBuilderLifecycle = ({
     toasts,
   ]);
 
+  const {
+    fieldValidationById,
+    variableNameValidationById,
+    hasFieldValidationWarnings,
+    hasInvalidVariableNames,
+  } = useFieldValidation({ formConfig, fieldValues });
+
+  const { renderedPayloads, templateValidationByConnector } = usePayloadTemplates({
+    formConfig,
+    fieldValues,
+  });
+
+  const { connectorSelectionState, connectorStatusById, connectorSummaries, connectorSummaryItems } =
+    useConnectorState({
+      formConfig,
+      connectorTypes,
+      connectors,
+      isLoadingConnectors,
+      templateValidationByConnector,
+    });
+
+  const derivedState = useMemo(
+    () => ({
+      fieldValidationById,
+      variableNameValidationById,
+      hasFieldValidationWarnings,
+      hasInvalidVariableNames,
+      renderedPayloads,
+      templateValidationByConnector,
+      connectorSelectionState,
+      connectorStatusById,
+      connectorSummaries,
+      connectorSummaryItems,
+    }),
+    [
+      fieldValidationById,
+      variableNameValidationById,
+      hasFieldValidationWarnings,
+      hasInvalidVariableNames,
+      renderedPayloads,
+      templateValidationByConnector,
+      connectorSelectionState,
+      connectorStatusById,
+      connectorSummaries,
+      connectorSummaryItems,
+    ]
+  );
+
+  const formBuilderContextValue = useMemo<FormBuilderContextValue>(
+    () => ({
+      formConfig,
+      fieldValues,
+      derivedState,
+      updateConfig,
+      addField,
+      removeField,
+      updateField,
+      handleFieldReorder,
+      handleFieldValueChange,
+      addConnector,
+      removeConnector,
+      handleConnectorTypeChange,
+      handleConnectorChange,
+      handleConnectorLabelChange,
+      handleConnectorTemplateChange,
+    }),
+    [
+      formConfig,
+      fieldValues,
+      derivedState,
+      updateConfig,
+      addField,
+      removeField,
+      updateField,
+      handleFieldReorder,
+      handleFieldValueChange,
+      addConnector,
+      removeConnector,
+      handleConnectorTypeChange,
+      handleConnectorChange,
+      handleConnectorLabelChange,
+      handleConnectorTemplateChange,
+    ]
+  );
+
   return {
     formConfig,
     fieldValues,
-    handleFieldValueChange,
-    updateConfig,
-    updateField,
-    removeField,
-    addField,
-    handleFieldReorder,
-    handleConnectorLabelChange,
-    handleConnectorTemplateChange,
-    addConnector,
-    removeConnector,
-    handleConnectorTypeChange,
-    handleConnectorChange,
     connectorTypes,
     connectors,
     isLoadingConnectorTypes,
@@ -378,5 +455,17 @@ export const useFormBuilderLifecycle = ({
     initialLoadError,
     isSaving,
     handleSaveVisualizationRequest,
+    fieldValidationById,
+    variableNameValidationById,
+    hasFieldValidationWarnings,
+    hasInvalidVariableNames,
+    renderedPayloads,
+    templateValidationByConnector,
+    connectorSelectionState,
+    connectorStatusById,
+    connectorSummaries,
+    connectorSummaryItems,
+    derivedState,
+    formBuilderContextValue,
   };
 };

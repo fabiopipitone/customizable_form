@@ -10,9 +10,6 @@ import {
   SupportedConnectorTypeId,
 } from './types';
 import { DEFAULT_LAYOUT_COLUMNS, DEFAULT_STRING_SIZE } from './constants';
-import { useFieldValidation } from './hooks/use_field_validation';
-import { usePayloadTemplates } from './hooks/use_payload_templates';
-import { useConnectorState } from './hooks/use_connector_state';
 import { useConnectorExecution } from './hooks/use_connector_execution';
 import { useFormBuilderLifecycle } from './hooks/use_form_builder_lifecycle';
 import { FormBuilderProvider } from './form_builder_context';
@@ -122,20 +119,7 @@ export const CustomizableFormBuilder = ({
   const {
     formConfig,
     fieldValues,
-    handleFieldValueChange,
-    updateConfig,
-    updateField,
-    removeField,
-    addField,
-    handleFieldReorder,
-    handleConnectorLabelChange,
-    handleConnectorTemplateChange,
-    addConnector,
-    removeConnector,
-    handleConnectorTypeChange,
-    handleConnectorChange,
     connectorTypes,
-    connectors,
     isLoadingConnectorTypes,
     isLoadingConnectors,
     connectorTypesError,
@@ -144,6 +128,13 @@ export const CustomizableFormBuilder = ({
     initialLoadError,
     isSaving,
     handleSaveVisualizationRequest,
+    hasFieldValidationWarnings,
+    hasInvalidVariableNames,
+    renderedPayloads,
+    templateValidationByConnector,
+    connectorSelectionState,
+    connectorSummaries,
+    formBuilderContextValue,
   } = useFormBuilderLifecycle({
     mode,
     savedObjectId: initialSavedObjectId,
@@ -154,25 +145,6 @@ export const CustomizableFormBuilder = ({
     initialConfig: INITIAL_CONFIG,
     initialAttributes: INITIAL_SAVED_OBJECT_ATTRIBUTES,
   });
-
-  const {
-    fieldValidationById,
-    variableNameValidationById,
-    hasFieldValidationWarnings,
-    hasInvalidVariableNames,
-  } = useFieldValidation({ formConfig, fieldValues });
-  const { renderedPayloads, templateValidationByConnector } = usePayloadTemplates({
-    formConfig,
-    fieldValues,
-  });
-  const { connectorSelectionState, connectorStatusById, connectorSummaries, connectorSummaryItems } =
-    useConnectorState({
-      formConfig,
-      connectorTypes,
-      connectors,
-      isLoadingConnectors,
-      templateValidationByConnector,
-    });
 
   const connectorTypeOptions = useMemo(() => toConnectorTypeOptions(connectorTypes), [connectorTypes]);
 
@@ -261,70 +233,6 @@ export const CustomizableFormBuilder = ({
   const handleCancelConnectorExecution = useCallback(() => {
     setIsSubmitConfirmationVisible(false);
   }, []);
-
-  const derivedState = useMemo(
-    () => ({
-      fieldValidationById,
-      variableNameValidationById,
-      hasFieldValidationWarnings,
-      hasInvalidVariableNames,
-      renderedPayloads,
-      templateValidationByConnector,
-      connectorSelectionState,
-      connectorStatusById,
-      connectorSummaries,
-      connectorSummaryItems,
-    }),
-    [
-      fieldValidationById,
-      variableNameValidationById,
-      hasFieldValidationWarnings,
-      hasInvalidVariableNames,
-      renderedPayloads,
-      templateValidationByConnector,
-      connectorSelectionState,
-      connectorStatusById,
-      connectorSummaries,
-      connectorSummaryItems,
-    ]
-  );
-
-  const formBuilderContextValue = useMemo(
-    () => ({
-      formConfig,
-      fieldValues,
-      derivedState,
-      updateConfig,
-      addField,
-      removeField,
-      updateField,
-      handleFieldReorder,
-      handleFieldValueChange,
-      addConnector,
-      removeConnector,
-      handleConnectorTypeChange,
-      handleConnectorChange,
-      handleConnectorLabelChange,
-      handleConnectorTemplateChange,
-    }),
-    [
-      formConfig,
-      fieldValues,
-      derivedState,
-      updateConfig,
-      addField,
-      removeField,
-      updateField,
-      handleFieldReorder,
-      handleFieldValueChange,
-      addConnector,
-      removeConnector,
-      handleConnectorTypeChange,
-      handleConnectorChange,
-      handleConnectorLabelChange,
-      handleConnectorTemplateChange,
-    ]
-  );
 
   if (isInitialLoading) {
     return (
