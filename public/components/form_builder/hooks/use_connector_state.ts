@@ -1,11 +1,13 @@
 import { useMemo } from 'react';
-import { i18n } from '@kbn/i18n';
 import type { ActionConnector } from '@kbn/alerts-ui-shared/src/common/types';
 import type { ActionType } from '@kbn/actions-types';
 
 import type { FormConfig, SupportedConnectorTypeId } from '../types';
 import type { ConnectorSummaryItem, ConnectorSummaryStatus } from '../connector_summary';
-import { DEFAULT_CONNECTOR_SUMMARY_STATUS } from '../connector_summary';
+import {
+  buildConnectorSummaries,
+  buildConnectorSummaryItems,
+} from '../utils/shared';
 
 export interface ConnectorSelectionStateEntry {
   connectorsForType: Array<ActionConnector & { actionTypeId: SupportedConnectorTypeId }>;
@@ -104,47 +106,21 @@ export const useConnectorState = ({
     return status;
   }, [formConfig.connectors, connectorSelectionState, templateValidationByConnector, isLoadingConnectors]);
 
-  const connectorSummaries = useMemo(() => {
-    return formConfig.connectors.map((connectorConfig, index) => ({
-      config: connectorConfig,
-      type: connectorTypes.find((type) => type.id === connectorConfig.connectorTypeId) ?? null,
-      connector:
-        connectors.find((connectorInstance) => connectorInstance.id === connectorConfig.connectorId) ??
-        null,
-      label:
-        (connectorConfig.label || '').trim() ||
-        i18n.translate('customizableForm.builder.connectorFallbackLabel', {
-          defaultMessage: 'Connector {number}',
-          values: { number: index + 1 },
-        }),
-      status: connectorStatusById[connectorConfig.id] ?? DEFAULT_CONNECTOR_SUMMARY_STATUS,
-    }));
-  }, [formConfig.connectors, connectorTypes, connectors, connectorStatusById]);
+  const connectorSummaries = useMemo(
+    () =>
+      buildConnectorSummaries({
+        formConfig,
+        connectorTypes,
+        connectors,
+        connectorStatusById,
+      }),
+    [formConfig, connectorTypes, connectors, connectorStatusById]
+  );
 
-  const connectorSummaryItems = useMemo<ConnectorSummaryItem[]>(() => {
-    return connectorSummaries.map((summary, index) => {
-      const connectorName =
-        summary.connector?.name ??
-        i18n.translate('customizableForm.builder.connectorSummary.connectorFallback', {
-          defaultMessage: 'Unnamed connector {index}',
-          values: { index: index + 1 },
-        });
-      const rawTypeLabel =
-        summary.type?.name ??
-        summary.connector?.actionTypeId ??
-        summary.config.connectorTypeId;
-      const typeLabel =
-        rawTypeLabel && rawTypeLabel.trim().length > 0 ? rawTypeLabel : '—';
-
-      return {
-        id: summary.config.id,
-        label: summary.label,
-        connectorName,
-        connectorTypeLabel: typeLabel,
-        status: summary.status,
-      };
-    });
-  }, [connectorSummaries]);
+  const connectorSummaryItems = useMemo<ConnectorSummaryItem[]>(
+    () => buildConnectorSummaryItems(connectorSummaries),
+    [connectorSummaries]
+  );
 
   return {
     connectorSelectionState,

@@ -6,6 +6,7 @@ import type { ActionConnector } from '@kbn/alerts-ui-shared/src/common/types';
 import type { ActionType } from '@kbn/actions-types';
 
 import type { SupportedConnectorTypeId } from './types';
+import { getErrorMessage } from './utils/shared';
 
 const CONNECTOR_TYPE_CANONICAL: Record<string, SupportedConnectorTypeId> = {
   '.index': '.index',
@@ -17,19 +18,6 @@ const CONNECTOR_TYPE_CANONICAL: Record<string, SupportedConnectorTypeId> = {
 export const getCanonicalConnectorTypeId = (id?: string | null): SupportedConnectorTypeId | null => {
   if (!id) return null;
   return CONNECTOR_TYPE_CANONICAL[id] ?? null;
-};
-
-const getErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) return error.message;
-  if (typeof error === 'string') return error;
-  if (error && typeof error === 'object') {
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return String(error);
-    }
-  }
-  return String(error);
 };
 
 export interface ConnectorsData {

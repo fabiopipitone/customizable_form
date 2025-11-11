@@ -4,19 +4,7 @@ import { i18n } from '@kbn/i18n';
 
 import type { FormConfig } from '../types';
 import { executeFormConnectors } from '../../../services/execute_connectors';
-
-const getErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) return error.message;
-  if (typeof error === 'string') return error;
-  if (error && typeof error === 'object') {
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return String(error);
-    }
-  }
-  return String(error);
-};
+import { getErrorMessage } from '../utils/shared';
 
 export interface UseConnectorExecutionParams {
   http: CoreStart['http'];

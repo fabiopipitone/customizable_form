@@ -17,6 +17,16 @@ const getConnectorFallbackLabel = (index: number) =>
     values: { number: index + 1 },
   });
 
+const deriveMaxNumericSuffix = (items: Array<{ id: string }>): number =>
+  items.reduce((max, item) => {
+    const match = item.id.match(/(\d+)$/);
+    if (!match) {
+      return max;
+    }
+    const value = Number(match[1]);
+    return Number.isFinite(value) ? Math.max(max, value) : max;
+  }, 0);
+
 export interface UseFormConfigStateParams {
   initialConfig: FormConfig;
 }
@@ -36,13 +46,23 @@ export const useFormConfigState = ({
   initialConfig,
 }: UseFormConfigStateParams) => {
   const [formConfig, setFormConfig] = useState<FormConfig>(initialConfig);
-  const fieldCounter = useRef<number>(initialConfig.fields.length);
-  const connectorCounter = useRef<number>(initialConfig.connectors.length);
+  const fieldCounter = useRef<number>(
+    Math.max(initialConfig.fields.length, deriveMaxNumericSuffix(initialConfig.fields))
+  );
+  const connectorCounter = useRef<number>(
+    Math.max(initialConfig.connectors.length, deriveMaxNumericSuffix(initialConfig.connectors))
+  );
 
   const replaceFormConfig = useCallback((nextConfig: FormConfig) => {
     setFormConfig(nextConfig);
-    fieldCounter.current = nextConfig.fields.length;
-    connectorCounter.current = nextConfig.connectors.length;
+    fieldCounter.current = Math.max(
+      nextConfig.fields.length,
+      deriveMaxNumericSuffix(nextConfig.fields)
+    );
+    connectorCounter.current = Math.max(
+      nextConfig.connectors.length,
+      deriveMaxNumericSuffix(nextConfig.connectors)
+    );
   }, []);
 
   const updateConfig = useCallback((partial: Partial<FormConfig>) => {
