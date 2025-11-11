@@ -559,10 +559,38 @@ const {
     setIsSubmitConfirmationVisible(false);
   }, []);
 
+  const derivedState = useMemo(
+    () => ({
+      fieldValidationById,
+      variableNameValidationById,
+      hasFieldValidationWarnings,
+      hasInvalidVariableNames,
+      renderedPayloads,
+      templateValidationByConnector,
+      connectorSelectionState,
+      connectorStatusById,
+      connectorSummaries,
+      connectorSummaryItems,
+    }),
+    [
+      fieldValidationById,
+      variableNameValidationById,
+      hasFieldValidationWarnings,
+      hasInvalidVariableNames,
+      renderedPayloads,
+      templateValidationByConnector,
+      connectorSelectionState,
+      connectorStatusById,
+      connectorSummaries,
+      connectorSummaryItems,
+    ]
+  );
+
   const formBuilderContextValue = useMemo(
     () => ({
       formConfig,
       fieldValues,
+      derivedState,
       updateConfig,
       addField,
       removeField,
@@ -579,6 +607,7 @@ const {
     [
       formConfig,
       fieldValues,
+      derivedState,
       updateConfig,
       addField,
       removeField,

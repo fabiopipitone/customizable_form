@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import type { ActionConnector } from '@kbn/alerts-ui-shared/src/common/types';
 import type { ActionType } from '@kbn/actions-types';
 
-import type { FormConfig, SupportedConnectorTypeId } from '../types';
+import type { FormConfig, FormConnectorConfig, SupportedConnectorTypeId } from '../types';
 import type { ConnectorSummaryItem, ConnectorSummaryStatus } from '../connector_summary';
 import {
   buildConnectorSummaries,
@@ -14,6 +14,14 @@ export interface ConnectorSelectionStateEntry {
   availableConnectors: Array<ActionConnector & { actionTypeId: SupportedConnectorTypeId }>;
   hasType: boolean;
   hasSelection: boolean;
+}
+
+export interface ConnectorSummaryEntry {
+  config: FormConnectorConfig;
+  type: ActionType & { id: SupportedConnectorTypeId } | null;
+  connector: ActionConnector & { actionTypeId: SupportedConnectorTypeId } | null;
+  label: string;
+  status: ConnectorSummaryStatus;
 }
 
 interface UseConnectorStateParams {
@@ -106,7 +114,7 @@ export const useConnectorState = ({
     return status;
   }, [formConfig.connectors, connectorSelectionState, templateValidationByConnector, isLoadingConnectors]);
 
-  const connectorSummaries = useMemo(
+  const connectorSummaries = useMemo<ConnectorSummaryEntry[]>(
     () =>
       buildConnectorSummaries({
         formConfig,

@@ -3,6 +3,11 @@ import { useMemo } from 'react';
 import type { FormConfig } from '../types';
 import { getTemplateVariables, renderConnectorPayload } from '../utils/shared';
 
+export interface ConnectorTemplateValidation {
+  missing: string[];
+  unused: Array<{ key: string; label: string }>;
+}
+
 interface UsePayloadTemplatesParams {
   formConfig: FormConfig | null;
   fieldValues: Record<string, string>;
@@ -33,9 +38,7 @@ export const usePayloadTemplates = ({ formConfig, fieldValues }: UsePayloadTempl
     }
 
     const definedKeys = new Set(fields.map((field) => field.key.trim()).filter((key) => key.length > 0));
-    return connectors.reduce<
-      Record<string, { missing: string[]; unused: Array<{ key: string; label: string }> }>
-    >((acc, connectorConfig) => {
+    return connectors.reduce<Record<string, ConnectorTemplateValidation>>((acc, connectorConfig) => {
       const variables = getTemplateVariables(connectorConfig.documentTemplate);
       const missing = variables.filter((variable) => !definedKeys.has(variable));
       const usedVariables = new Set(variables);

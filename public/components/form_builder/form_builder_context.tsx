@@ -1,10 +1,32 @@
 import React, { createContext, useContext } from 'react';
 
 import type { FormConfig, FormFieldConfig } from './types';
+import type { FieldValidationResult } from './preview';
+import type { VariableNameValidationResult } from './validation';
+import type { ConnectorSummaryItem, ConnectorSummaryStatus } from './connector_summary';
+import type {
+  ConnectorSelectionStateEntry,
+  ConnectorSummaryEntry,
+} from './hooks/use_connector_state';
+import type { ConnectorTemplateValidation } from './hooks/use_payload_templates';
+
+export interface FormBuilderDerivedState {
+  fieldValidationById: Record<string, FieldValidationResult>;
+  variableNameValidationById: Record<string, VariableNameValidationResult>;
+  hasFieldValidationWarnings: boolean;
+  hasInvalidVariableNames: boolean;
+  renderedPayloads: Record<string, string>;
+  templateValidationByConnector: Record<string, ConnectorTemplateValidation>;
+  connectorSelectionState: Record<string, ConnectorSelectionStateEntry>;
+  connectorStatusById: Record<string, ConnectorSummaryStatus>;
+  connectorSummaries: ConnectorSummaryEntry[];
+  connectorSummaryItems: ConnectorSummaryItem[];
+}
 
 export interface FormBuilderContextValue {
   formConfig: FormConfig;
   fieldValues: Record<string, string>;
+  derivedState: FormBuilderDerivedState;
   updateConfig: (changes: Partial<FormConfig>) => void;
   addField: () => void;
   removeField: (fieldId: string) => void;
