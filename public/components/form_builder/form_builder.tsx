@@ -1,16 +1,13 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React from 'react';
 import { i18n } from '@kbn/i18n';
 import type { AppMountParameters, CoreStart, NotificationsStart } from '@kbn/core/public';
 import { EuiButton, EuiCallOut, EuiLoadingSpinner, EuiSpacer } from '@elastic/eui';
-import type { ActionType } from '@kbn/actions-types';
 
 import {
   FormConfig,
   FormConnectorConfig,
-  SupportedConnectorTypeId,
 } from './types';
 import { DEFAULT_LAYOUT_COLUMNS, DEFAULT_STRING_SIZE } from './constants';
-import { useConnectorExecution } from './hooks/use_connector_execution';
 import { useFormBuilderLifecycle } from './hooks/use_form_builder_lifecycle';
 import { FormBuilderProvider } from './form_builder_context';
 import FormBuilderLayout from './form_builder_layout';
@@ -102,9 +99,6 @@ const INITIAL_SAVED_OBJECT_ATTRIBUTES: CustomizableFormAttributesMeta = {
   description: '',
 };
 
-const toConnectorTypeOptions = (types: Array<ActionType & { id: SupportedConnectorTypeId }>) =>
-  types.map((type) => ({ value: type.id, text: type.name }));
-
 export const CustomizableFormBuilder = ({
   mode,
   savedObjectId: initialSavedObjectId,
@@ -113,12 +107,7 @@ export const CustomizableFormBuilder = ({
   application,
   history,
 }: CustomizableFormBuilderProps) => {
-  const [isSubmitConfirmationVisible, setIsSubmitConfirmationVisible] = useState<boolean>(false);
-  const { toasts } = notifications;
-
   const {
-    formConfig,
-    fieldValues,
     connectorTypes,
     isLoadingConnectorTypes,
     isLoadingConnectors,
@@ -128,13 +117,15 @@ export const CustomizableFormBuilder = ({
     initialLoadError,
     isSaving,
     handleSaveVisualizationRequest,
-    hasFieldValidationWarnings,
-    hasInvalidVariableNames,
-    renderedPayloads,
-    templateValidationByConnector,
-    connectorSelectionState,
-    connectorSummaries,
     formBuilderContextValue,
+    connectorTypeOptions,
+    isSaveDisabled,
+    isSubmitDisabled,
+    isSubmitConfirmationVisible,
+    handleTestSubmission,
+    handleConfirmConnectorExecution,
+    handleCancelConnectorExecution,
+    isConnectorExecutionInFlight,
   } = useFormBuilderLifecycle({
     mode,
     savedObjectId: initialSavedObjectId,
@@ -145,94 +136,6 @@ export const CustomizableFormBuilder = ({
     initialConfig: INITIAL_CONFIG,
     initialAttributes: INITIAL_SAVED_OBJECT_ATTRIBUTES,
   });
-
-  const connectorTypeOptions = useMemo(() => toConnectorTypeOptions(connectorTypes), [connectorTypes]);
-
-  const hasEmptyConnectorLabels = useMemo(
-    () => formConfig.connectors.some((connectorConfig) => !(connectorConfig.label || '').trim()),
-    [formConfig.connectors]
-  );
-
-  const hasInvalidConnectorSelections = useMemo(
-    () =>
-      formConfig.connectors.some((connectorConfig) => {
-        const state = connectorSelectionState[connectorConfig.id];
-        return !state || !state.hasSelection;
-      }),
-    [formConfig.connectors, connectorSelectionState]
-  );
-
-  const isSaveDisabled = useMemo(
-    () =>
-      hasEmptyConnectorLabels ||
-      hasInvalidConnectorSelections ||
-      formConfig.connectors.some(
-        (connectorConfig) =>
-          (templateValidationByConnector[connectorConfig.id]?.missing.length ?? 0) > 0
-      ) ||
-      hasInvalidVariableNames,
-    [
-      formConfig.connectors,
-      templateValidationByConnector,
-      hasEmptyConnectorLabels,
-      hasInvalidConnectorSelections,
-      hasInvalidVariableNames,
-    ]
-  );
-
-  const connectorLabelsById = useMemo(() => {
-    const labels: Record<string, string> = {};
-    connectorSummaries.forEach((summary) => {
-      labels[summary.config.id] = summary.label;
-    });
-    return labels;
-  }, [connectorSummaries]);
-
-  const connectorExecution = useConnectorExecution({
-    http,
-    toasts,
-    formConfig,
-    renderedPayloads,
-    connectorLabelsById,
-  });
-
-  const isSubmitDisabled = useMemo(
-    () =>
-      formConfig.fields.some((field) => field.required && !(fieldValues[field.id]?.trim())) ||
-      hasFieldValidationWarnings ||
-      connectorExecution.isExecuting,
-    [formConfig.fields, fieldValues, hasFieldValidationWarnings, connectorExecution.isExecuting]
-  );
-
-  const handleTestSubmission = useCallback(() => {
-    if (!formConfig || formConfig.connectors.length === 0) {
-      toasts.addWarning({
-        title: i18n.translate('customizableForm.builder.executeConnectors.noConnectorsTitle', {
-          defaultMessage: 'No connectors configured',
-        }),
-        text: i18n.translate('customizableForm.builder.executeConnectors.noConnectorsBody', {
-          defaultMessage: 'Add at least one connector before submitting the form.',
-        }),
-      });
-      return;
-    }
-
-    if (formConfig.requireConfirmationOnSubmit) {
-      setIsSubmitConfirmationVisible(true);
-      return;
-    }
-
-    connectorExecution.executeNow();
-  }, [connectorExecution, formConfig, toasts]);
-
-  const handleConfirmConnectorExecution = useCallback(() => {
-    setIsSubmitConfirmationVisible(false);
-    connectorExecution.executeNow();
-  }, [connectorExecution]);
-
-  const handleCancelConnectorExecution = useCallback(() => {
-    setIsSubmitConfirmationVisible(false);
-  }, []);
 
   if (isInitialLoading) {
     return (
@@ -282,7 +185,7 @@ export const CustomizableFormBuilder = ({
       <FormBuilderLayout
         isSubmitDisabled={isSubmitDisabled}
         onSubmit={handleTestSubmission}
-        isSubmitting={connectorExecution.isExecuting}
+        isSubmitting={isConnectorExecutionInFlight}
         isSubmitConfirmationVisible={isSubmitConfirmationVisible}
         onConfirmConnectorExecution={handleConfirmConnectorExecution}
         onCancelConnectorExecution={handleCancelConnectorExecution}

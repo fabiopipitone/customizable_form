@@ -8,8 +8,9 @@ import {
   withSuspense,
 } from '@kbn/presentation-util-plugin/public';
 import type { SaveResult } from '@kbn/saved-objects-plugin/public';
+import type { ActionType } from '@kbn/actions-types';
 
-import type { FormConfig } from '../types';
+import type { FormConfig, SupportedConnectorTypeId } from '../types';
 import { useFormConfigState } from '../use_form_config_state';
 import { useConnectorsData, getCanonicalConnectorTypeId } from '../use_connectors_data';
 import {
@@ -26,8 +27,12 @@ import { useFieldValidation } from './use_field_validation';
 import { usePayloadTemplates } from './use_payload_templates';
 import { useConnectorState } from './use_connector_state';
 import type { FormBuilderContextValue } from '../form_builder_context';
+import { useConnectorExecution } from './use_connector_execution';
 
 const SavedObjectSaveModalDashboard = withSuspense(LazySavedObjectSaveModalDashboard);
+
+const toConnectorTypeOptions = (types: Array<ActionType & { id: SupportedConnectorTypeId }>) =>
+  types.map((type) => ({ value: type.id, text: type.name }));
 
 export interface UseFormBuilderLifecycleParams {
   mode: 'create' | 'edit';
@@ -77,6 +82,7 @@ export const useFormBuilderLifecycle = ({
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(mode === 'edit');
   const [initialLoadError, setInitialLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isSubmitConfirmationVisible, setIsSubmitConfirmationVisible] = useState(false);
 
   const { toasts } = notifications;
   const {
@@ -405,6 +411,94 @@ export const useFormBuilderLifecycle = ({
     ]
   );
 
+  const connectorTypeOptions = useMemo(() => toConnectorTypeOptions(connectorTypes), [connectorTypes]);
+
+  const hasEmptyConnectorLabels = useMemo(
+    () => formConfig.connectors.some((connectorConfig) => !(connectorConfig.label || '').trim()),
+    [formConfig.connectors]
+  );
+
+  const hasInvalidConnectorSelections = useMemo(
+    () =>
+      formConfig.connectors.some((connectorConfig) => {
+        const state = connectorSelectionState[connectorConfig.id];
+        return !state || !state.hasSelection;
+      }),
+    [formConfig.connectors, connectorSelectionState]
+  );
+
+  const isSaveDisabled = useMemo(
+    () =>
+      hasEmptyConnectorLabels ||
+      hasInvalidConnectorSelections ||
+      formConfig.connectors.some(
+        (connectorConfig) =>
+          (templateValidationByConnector[connectorConfig.id]?.missing.length ?? 0) > 0
+      ) ||
+      hasInvalidVariableNames,
+    [
+      formConfig.connectors,
+      templateValidationByConnector,
+      hasEmptyConnectorLabels,
+      hasInvalidConnectorSelections,
+      hasInvalidVariableNames,
+    ]
+  );
+
+  const connectorLabelsById = useMemo(() => {
+    const labels: Record<string, string> = {};
+    connectorSummaries.forEach((summary) => {
+      labels[summary.config.id] = summary.label;
+    });
+    return labels;
+  }, [connectorSummaries]);
+
+  const connectorExecution = useConnectorExecution({
+    http,
+    toasts,
+    formConfig,
+    renderedPayloads,
+    connectorLabelsById,
+  });
+
+  const isSubmitDisabled = useMemo(
+    () =>
+      formConfig.fields.some((field) => field.required && !(fieldValues[field.id]?.trim())) ||
+      hasFieldValidationWarnings ||
+      connectorExecution.isExecuting,
+    [formConfig.fields, fieldValues, hasFieldValidationWarnings, connectorExecution.isExecuting]
+  );
+
+  const handleTestSubmission = useCallback(() => {
+    if (!formConfig || formConfig.connectors.length === 0) {
+      toasts.addWarning({
+        title: i18n.translate('customizableForm.builder.executeConnectors.noConnectorsTitle', {
+          defaultMessage: 'No connectors configured',
+        }),
+        text: i18n.translate('customizableForm.builder.executeConnectors.noConnectorsBody', {
+          defaultMessage: 'Add at least one connector before submitting the form.',
+        }),
+      });
+      return;
+    }
+
+    if (formConfig.requireConfirmationOnSubmit) {
+      setIsSubmitConfirmationVisible(true);
+      return;
+    }
+
+    connectorExecution.executeNow();
+  }, [connectorExecution, formConfig, toasts]);
+
+  const handleConfirmConnectorExecution = useCallback(() => {
+    setIsSubmitConfirmationVisible(false);
+    connectorExecution.executeNow();
+  }, [connectorExecution]);
+
+  const handleCancelConnectorExecution = useCallback(() => {
+    setIsSubmitConfirmationVisible(false);
+  }, []);
+
   const formBuilderContextValue = useMemo<FormBuilderContextValue>(
     () => ({
       formConfig,
@@ -467,5 +561,15 @@ export const useFormBuilderLifecycle = ({
     connectorSummaryItems,
     derivedState,
     formBuilderContextValue,
+    connectorTypeOptions,
+    hasEmptyConnectorLabels,
+    hasInvalidConnectorSelections,
+    isSaveDisabled,
+    isSubmitDisabled,
+    isSubmitConfirmationVisible,
+    handleTestSubmission,
+    handleConfirmConnectorExecution,
+    handleCancelConnectorExecution,
+    isConnectorExecutionInFlight: connectorExecution.isExecuting,
   };
 };
