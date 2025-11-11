@@ -1,18 +1,7 @@
 import { useMemo } from 'react';
 
 import type { FormConfig } from '../types';
-
-const getTemplateVariables = (template: string): string[] => {
-  const variables = new Set<string>();
-  template.replace(/{{\s*([^{}\s]+)\s*}}/g, (_, variable: string) => {
-    const trimmed = variable.trim();
-    if (trimmed) {
-      variables.add(trimmed);
-    }
-    return '';
-  });
-  return Array.from(variables);
-};
+import { getTemplateVariables, renderConnectorPayload } from '../utils/shared';
 
 interface UsePayloadTemplatesParams {
   formConfig: FormConfig | null;
@@ -28,22 +17,12 @@ export const usePayloadTemplates = ({ formConfig, fieldValues }: UsePayloadTempl
       return {};
     }
 
-    const valueMap = fields.reduce<Record<string, string>>((acc, field) => {
-      if (field.key) {
-        acc[field.key.trim()] = fieldValues[field.id] ?? '';
-      }
-      return acc;
-    }, {});
-
     return connectors.reduce<Record<string, string>>((acc, connectorConfig) => {
-      const rendered = connectorConfig.documentTemplate.replace(
-        /{{\s*([^{}\s]+)\s*}}/g,
-        (_, variable: string) => {
-          const trimmed = variable.trim();
-          return valueMap[trimmed] ?? '';
-        }
-      );
-      acc[connectorConfig.id] = rendered;
+      acc[connectorConfig.id] = renderConnectorPayload({
+        connectorConfig,
+        fields,
+        fieldValues,
+      });
       return acc;
     }, {});
   }, [formConfig, connectors, fields, fieldValues]);

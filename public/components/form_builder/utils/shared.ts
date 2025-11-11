@@ -1,7 +1,7 @@
 import type { ActionConnector } from '@kbn/alerts-ui-shared/src/common/types';
 import type { ActionType } from '@kbn/actions-types';
 
-import type { FormConfig, FormConnectorConfig, SupportedConnectorTypeId } from '../types';
+import type { FormConfig, FormConnectorConfig, SupportedConnectorTypeId, FormFieldConfig } from '../types';
 import {
   DEFAULT_CONNECTOR_SUMMARY_STATUS,
   type ConnectorSummaryItem,
@@ -78,3 +78,38 @@ export const buildConnectorSummaryItems = (summaries: Array<{
     };
   });
 
+const TEMPLATE_VARIABLE_REGEX = /{{\s*([^{}\s]+)\s*}}/g;
+
+export const getTemplateVariables = (template: string): string[] => {
+  const variables = new Set<string>();
+  template.replace(TEMPLATE_VARIABLE_REGEX, (_, variable: string) => {
+    const trimmed = variable.trim();
+    if (trimmed) {
+      variables.add(trimmed);
+    }
+    return '';
+  });
+  return Array.from(variables);
+};
+
+export const renderConnectorPayload = ({
+  connectorConfig,
+  fields,
+  fieldValues,
+}: {
+  connectorConfig: FormConnectorConfig;
+  fields: FormFieldConfig[];
+  fieldValues: Record<string, string>;
+}): string => {
+  const valueMap = fields.reduce<Record<string, string>>((acc, field) => {
+    if (field.key) {
+      acc[field.key.trim()] = fieldValues[field.id] ?? '';
+    }
+    return acc;
+  }, {});
+
+  return connectorConfig.documentTemplate.replace(TEMPLATE_VARIABLE_REGEX, (_, variable: string) => {
+    const trimmed = variable.trim();
+    return valueMap[trimmed] ?? '';
+  });
+};
