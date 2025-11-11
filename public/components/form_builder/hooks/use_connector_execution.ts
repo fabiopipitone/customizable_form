@@ -97,7 +97,7 @@ export const useConnectorExecution = ({
     } finally {
       setIsExecuting(false);
     }
-  }, [formConfig, renderedPayloads, http, toasts, connectorLabelsById]);
+  }, [formConfig, renderedPayloads, http, toasts, connectorLabelsById, handlers]);
 
   return {
     executeNow,
