@@ -11,38 +11,20 @@ import {
   EuiPanel,
 } from '@elastic/eui';
 import { i18n } from '@kbn/i18n';
-import type { ActionConnector } from '@kbn/alerts-ui-shared/src/common/types';
-import type { ActionType } from '@kbn/actions-types';
-
-import type {
-  FormConnectorConfig,
-  SupportedConnectorTypeId,
-} from './types';
 import PanelHeader from './panel_header';
-import { ConnectorSummaryTable, type ConnectorSummaryItem, type ConnectorSummaryStatus } from './connector_summary';
+import { ConnectorSummaryTable } from './connector_summary';
+import { useFormBuilderContext } from './form_builder_context';
 
-export interface InfoPanelProps {
-  connectorSummaries: Array<{
-    config: FormConnectorConfig;
-    label: string;
-    type: ActionType & { id: SupportedConnectorTypeId } | null;
-    connector: ActionConnector & { actionTypeId: SupportedConnectorTypeId } | null;
-    status: ConnectorSummaryStatus;
-  }>;
-  connectorSummaryItems: ConnectorSummaryItem[];
-  renderedPayloads: Record<string, string>;
-  templateValidationByConnector: Record<
-    string,
-    { missing: string[]; unused: Array<{ key: string; label: string }> }
-  >;
-}
+export const InfoPanel: React.FC = () => {
+  const {
+    derivedState: {
+      connectorSummaries,
+      connectorSummaryItems,
+      renderedPayloads,
+      templateValidationByConnector,
+    },
+  } = useFormBuilderContext();
 
-export const InfoPanel: React.FC<InfoPanelProps> = ({
-  connectorSummaries,
-  connectorSummaryItems,
-  renderedPayloads,
-  templateValidationByConnector,
-}) => {
   const [activePayloadId, setActivePayloadId] = useState<string | null>(
     connectorSummaries[0]?.config.id ?? null
   );

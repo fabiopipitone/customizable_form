@@ -13,40 +13,19 @@ import type { ActionType } from '@kbn/actions-types';
 
 import PanelHeader from './panel_header';
 import type { SupportedConnectorTypeId } from './types';
-import { type VariableNameValidationResult } from './validation';
-import type { ConnectorSelectionStateEntry } from './hooks/use_connector_state';
-import type { FormBuilderContextValue } from './form_builder_context';
 import { GeneralTab } from './configuration_tabs/general_tab';
 import { ConnectorsTab } from './configuration_tabs/connectors_tab';
 import { FieldsTab } from './configuration_tabs/fields_tab';
 import { PayloadTab } from './configuration_tabs/payload_tab';
 
 interface ConfigurationPanelProps {
-  variableNameValidationById: Record<string, VariableNameValidationResult>;
-  hasInvalidVariableNames: boolean;
   onSaveRequest: () => void;
   connectorTypeOptions: Array<{ value: string; text: string }>;
   connectorTypes: Array<ActionType & { id: SupportedConnectorTypeId }>;
-  templateValidationByConnector: Record<string, { missing: string[]; unused: Array<{ key: string; label: string }> }>;
-  connectorStatusById: Record<
-    string,
-    {
-      hasWarning: boolean;
-      hasError: boolean;
-      hasTemplateWarning: boolean;
-      hasTemplateError: boolean;
-    }
-  >;
-  connectorSummaries: Array<{
-    config: FormBuilderContextValue['formConfig']['connectors'][number];
-    label: string;
-  }>;
-  connectorSelectionState: Record<string, ConnectorSelectionStateEntry>;
   isLoadingConnectorTypes: boolean;
   isLoadingConnectors: boolean;
   connectorTypesError: string | null;
   connectorsError: string | null;
-  hasEmptyConnectorLabels: boolean;
   isSaveDisabled: boolean;
   isSaving: boolean;
 }
@@ -54,20 +33,13 @@ interface ConfigurationPanelProps {
 type ConfigurationTabId = 'general' | 'connectors' | 'fields' | 'payload';
 
 export const ConfigurationPanel = ({
-  variableNameValidationById,
-  hasInvalidVariableNames,
   onSaveRequest,
   connectorTypeOptions,
   connectorTypes,
-  templateValidationByConnector,
-  connectorStatusById,
-  connectorSummaries,
-  connectorSelectionState,
   isLoadingConnectorTypes,
   isLoadingConnectors,
   connectorTypesError,
   connectorsError,
-  hasEmptyConnectorLabels,
   isSaveDisabled,
   isSaving,
 }: ConfigurationPanelProps) => {
@@ -108,30 +80,16 @@ export const ConfigurationPanel = ({
           <ConnectorsTab
             connectorTypeOptions={connectorTypeOptions}
             connectorTypes={connectorTypes}
-            connectorSelectionState={connectorSelectionState}
-            connectorStatusById={connectorStatusById}
             isLoadingConnectorTypes={isLoadingConnectorTypes}
             isLoadingConnectors={isLoadingConnectors}
             connectorTypesError={connectorTypesError}
             connectorsError={connectorsError}
-            hasEmptyConnectorLabels={hasEmptyConnectorLabels}
           />
         );
       case 'fields':
-        return (
-          <FieldsTab
-            variableNameValidationById={variableNameValidationById}
-            hasInvalidVariableNames={hasInvalidVariableNames}
-          />
-        );
+        return <FieldsTab />;
       case 'payload':
-        return (
-          <PayloadTab
-            connectorSummaries={connectorSummaries}
-            connectorStatusById={connectorStatusById}
-            templateValidationByConnector={templateValidationByConnector}
-          />
-        );
+        return <PayloadTab />;
       default:
         return null;
     }

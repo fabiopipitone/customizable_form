@@ -675,26 +675,16 @@ const {
       <FormBuilderLayout
         isSubmitDisabled={isSubmitDisabled}
         onSubmit={handleTestSubmission}
-        validationByFieldId={fieldValidationById}
         isSubmitting={connectorExecution.isExecuting}
-        connectorSummaries={connectorSummaries}
-        connectorSummaryItems={connectorSummaryItems}
-        renderedPayloads={renderedPayloads}
-        templateValidationByConnector={templateValidationByConnector}
         isSubmitConfirmationVisible={isSubmitConfirmationVisible}
         onConfirmConnectorExecution={handleConfirmConnectorExecution}
         onCancelConnectorExecution={handleCancelConnectorExecution}
         connectorTypeOptions={connectorTypeOptions}
         connectorTypes={connectorTypes}
-        connectorStatusById={connectorStatusById}
-        connectorSelectionState={connectorSelectionState}
         isLoadingConnectorTypes={isLoadingConnectorTypes}
         isLoadingConnectors={isLoadingConnectors}
         connectorTypesError={connectorTypesError}
         connectorsError={connectorsError}
-        hasEmptyConnectorLabels={hasEmptyConnectorLabels}
-        variableNameValidationById={variableNameValidationById}
-        hasInvalidVariableNames={hasInvalidVariableNames}
         isSaveDisabled={isSaveDisabled}
         isSaving={isSaving}
         onSaveRequest={handleSaveVisualizationRequest}

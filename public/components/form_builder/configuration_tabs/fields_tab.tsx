@@ -20,7 +20,7 @@ import { css } from '@emotion/react';
 
 import { DEFAULT_NUMBER_SIZE, DEFAULT_STRING_SIZE } from '../constants';
 import type { FormFieldConfig, FormFieldDataType, FormFieldType } from '../types';
-import { VARIABLE_NAME_RULES, validateVariableName } from '../validation';
+import { VARIABLE_NAME_RULES } from '../validation';
 import { useFormBuilderContext } from '../form_builder_context';
 
 const dragHandleStyles = css`
@@ -41,13 +41,15 @@ const dragHandleStyles = css`
 const getDefaultSizeForDataType = (dataType: FormFieldConfig['dataType']) =>
   dataType === 'number' ? { ...DEFAULT_NUMBER_SIZE } : { ...DEFAULT_STRING_SIZE };
 
-interface FieldsTabProps {
-  variableNameValidationById: Record<string, ReturnType<typeof validateVariableName>>;
-  hasInvalidVariableNames: boolean;
-}
-
-export const FieldsTab = ({ variableNameValidationById, hasInvalidVariableNames }: FieldsTabProps) => {
-  const { formConfig, updateField, removeField, addField, handleFieldReorder } = useFormBuilderContext();
+export const FieldsTab = () => {
+  const {
+    formConfig,
+    derivedState: { variableNameValidationById, hasInvalidVariableNames },
+    updateField,
+    removeField,
+    addField,
+    handleFieldReorder,
+  } = useFormBuilderContext();
 
   const handleDataTypeChange = (fieldId: string, nextType: FormFieldDataType, field: FormFieldConfig) => {
     updateField(fieldId, {
@@ -355,4 +357,3 @@ export const FieldsTab = ({ variableNameValidationById, hasInvalidVariableNames 
     </>
   );
 };
-

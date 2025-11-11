@@ -11,34 +11,14 @@ import {
   EuiTitle,
 } from '@elastic/eui';
 
-import { useFormBuilderContext, type FormBuilderContextValue } from '../form_builder_context';
+import { useFormBuilderContext } from '../form_builder_context';
 
-interface PayloadTabProps {
-  connectorSummaries: Array<{
-    config: FormBuilderContextValue['formConfig']['connectors'][number];
-    label: string;
-  }>;
-  connectorStatusById: Record<
-    string,
-    {
-      hasWarning: boolean;
-      hasError: boolean;
-      hasTemplateWarning: boolean;
-      hasTemplateError: boolean;
-    }
-  >;
-  templateValidationByConnector: Record<
-    string,
-    { missing: string[]; unused: Array<{ key: string; label: string }> }
-  >;
-}
-
-export const PayloadTab = ({
-  connectorSummaries,
-  connectorStatusById,
-  templateValidationByConnector,
-}: PayloadTabProps) => {
-  const { formConfig, handleConnectorTemplateChange } = useFormBuilderContext();
+export const PayloadTab = () => {
+  const {
+    formConfig,
+    derivedState: { connectorSummaries, connectorStatusById, templateValidationByConnector },
+    handleConnectorTemplateChange,
+  } = useFormBuilderContext();
 
   return (
     <>

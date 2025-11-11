@@ -18,7 +18,7 @@ import type { ActionType } from '@kbn/actions-types';
 
 import type { SupportedConnectorTypeId } from '../types';
 import { useFormBuilderContext } from '../form_builder_context';
-import type { ConnectorSelectionStateEntry } from '../hooks/use_connector_state';
+import type { ConnectorSummaryStatus } from '../connector_summary';
 
 const getConnectorFallbackLabel = (index: number) =>
   i18n.translate('customizableForm.builder.connectorFallbackLabel', {
@@ -29,14 +29,7 @@ const getConnectorFallbackLabel = (index: number) =>
 const toConnectorOptions = (connectors: ActionConnector[]) =>
   connectors.map((connector) => ({ value: connector.id, text: connector.name }));
 
-type ConnectorStatus = {
-  hasWarning: boolean;
-  hasError: boolean;
-  hasTemplateWarning: boolean;
-  hasTemplateError: boolean;
-};
-
-const DEFAULT_CONNECTOR_STATUS: ConnectorStatus = {
+const DEFAULT_CONNECTOR_STATUS: ConnectorSummaryStatus = {
   hasWarning: false,
   hasError: false,
   hasTemplateWarning: false,
@@ -46,34 +39,32 @@ const DEFAULT_CONNECTOR_STATUS: ConnectorStatus = {
 interface ConnectorsTabProps {
   connectorTypeOptions: Array<{ value: string; text: string }>;
   connectorTypes: Array<ActionType & { id: SupportedConnectorTypeId }>;
-  connectorSelectionState: Record<string, ConnectorSelectionStateEntry>;
-  connectorStatusById: Record<string, ConnectorStatus>;
   isLoadingConnectorTypes: boolean;
   isLoadingConnectors: boolean;
   connectorTypesError: string | null;
   connectorsError: string | null;
-  hasEmptyConnectorLabels: boolean;
 }
 
 export const ConnectorsTab = ({
   connectorTypeOptions,
   connectorTypes,
-  connectorSelectionState,
-  connectorStatusById,
   isLoadingConnectorTypes,
   isLoadingConnectors,
   connectorTypesError,
   connectorsError,
-  hasEmptyConnectorLabels,
 }: ConnectorsTabProps) => {
   const {
     formConfig,
+    derivedState: { connectorSelectionState, connectorStatusById },
     handleConnectorTypeChange,
     handleConnectorChange,
     handleConnectorLabelChange,
     addConnector,
     removeConnector,
   } = useFormBuilderContext();
+  const hasEmptyConnectorLabels = formConfig.connectors.some(
+    (connectorConfig) => !(connectorConfig.label || '').trim()
+  );
 
   return (
     <>
