@@ -1,13 +1,13 @@
 import { renderHook } from '@testing-library/react-hooks';
 
 import { useConnectorState } from '../use_connector_state';
-import type { FormConfig } from '../../types';
+import type { FormConfig, SupportedConnectorTypeId } from '../../types';
 import type { ActionConnector } from '@kbn/alerts-ui-shared/src/common/types';
 import type { ActionType } from '@kbn/actions-types';
 
 const connector = (id: string, overrides: Partial<FormConfig['connectors'][number]> = {}) => ({
   id,
-  connectorTypeId: overrides.connectorTypeId ?? '.index',
+  connectorTypeId: (overrides.connectorTypeId ?? '.index') as FormConfig['connectors'][number]['connectorTypeId'],
   connectorId: overrides.connectorId ?? `conn-${id}`,
   label: overrides.label ?? `Connector ${id}`,
   isLabelAuto: overrides.isLabelAuto ?? true,
@@ -36,21 +36,32 @@ const baseConfig: FormConfig = {
   ],
 };
 
-const actionType = (id: string): ActionType & { id: any } => ({
-  id,
-  name: id,
-  enabledInLicense: true,
-  minimumLicenseRequired: 'basic',
-  supportedFeatureIds: [],
-});
+const actionType = (id: SupportedConnectorTypeId): ActionType & { id: SupportedConnectorTypeId } =>
+  ({
+    id,
+    name: id,
+    enabledInLicense: true,
+    minimumLicenseRequired: 'basic',
+    supportedFeatureIds: [],
+    enabledInConfig: true,
+    enabled: true,
+    isSystemActionType: false,
+  } as ActionType & { id: SupportedConnectorTypeId });
 
-const actionConnector = (id: string, actionTypeId: string): ActionConnector & { actionTypeId: any } => ({
-  id,
-  name: `Connector ${id}`,
-  actionTypeId,
-  config: {},
-  secrets: {},
-});
+const actionConnector = (
+  id: string,
+  actionTypeId: SupportedConnectorTypeId
+): ActionConnector & { actionTypeId: SupportedConnectorTypeId } =>
+  ({
+    id,
+    name: `Connector ${id}`,
+    actionTypeId,
+    config: {},
+    secrets: {},
+    isPreconfigured: false,
+    isDeprecated: false,
+    isSystemAction: false,
+  } as ActionConnector & { actionTypeId: SupportedConnectorTypeId });
 
 describe('useConnectorState', () => {
   it('builds connector selection state and statuses', () => {
