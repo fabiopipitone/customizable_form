@@ -1,5 +1,6 @@
 import type { ActionConnector } from '@kbn/alerts-ui-shared/src/common/types';
 import type { ActionType } from '@kbn/actions-types';
+import type { CoreStart } from '@kbn/core/public';
 
 import type { FormConfig, FormConnectorConfig, SupportedConnectorTypeId, FormFieldConfig } from '../types';
 import {
@@ -112,4 +113,120 @@ export const renderConnectorPayload = ({
     const trimmed = variable.trim();
     return valueMap[trimmed] ?? '';
   });
+};
+
+export interface ExecuteConnectorHandlerParams {
+  connector: FormConnectorConfig;
+  http: CoreStart['http'];
+  renderedPayload: string;
+}
+
+export type ExecuteConnectorHandler = (params: ExecuteConnectorHandlerParams) => Promise<void>;
+export type ExecuteConnectorHandlerMap = Partial<
+  Record<SupportedConnectorTypeId, ExecuteConnectorHandler>
+>;
+
+const indexHandler: ExecuteConnectorHandler = async ({ connector, http, renderedPayload }) => {
+  const trimmed = renderedPayload.trim();
+  if (!trimmed) {
+    throw new Error('Rendered payload is empty.');
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch (error) {
+    throw new Error(`Unable to parse payload as JSON: ${getErrorMessage(error)}`);
+  }
+
+  const documents = Array.isArray(parsed) ? parsed : [parsed];
+
+  await http.post(`/api/actions/connector/${encodeURIComponent(connector.connectorId)}/_execute`, {
+    body: JSON.stringify({
+      params: {
+        documents,
+      },
+    }),
+  });
+};
+
+const webhookHandler: ExecuteConnectorHandler = async ({ connector, http, renderedPayload }) => {
+  const trimmed = renderedPayload.trim();
+  if (!trimmed) {
+    throw new Error('Rendered payload is empty.');
+  }
+
+  await http.post(`/api/actions/connector/${encodeURIComponent(connector.connectorId)}/_execute`, {
+    body: JSON.stringify({
+      params: {
+        body: trimmed,
+      },
+    }),
+  });
+};
+
+const DEFAULT_HANDLERS: Record<SupportedConnectorTypeId, ExecuteConnectorHandler> = {
+  '.index': indexHandler,
+  '.webhook': webhookHandler,
+};
+
+export const executeConnectorHandlers = async ({
+  http,
+  connectors,
+  renderedPayloads,
+  customHandlers,
+}: {
+  http: CoreStart['http'];
+  connectors: FormConnectorConfig[];
+  renderedPayloads: Record<string, string>;
+  customHandlers?: ExecuteConnectorHandlerMap;
+}): Promise<
+  Array<{
+    connector: FormConnectorConfig;
+    status: 'success' | 'error';
+    message?: string;
+  }>
+> => {
+  const handlerMap: ExecuteConnectorHandlerMap = {
+    ...DEFAULT_HANDLERS,
+    ...(customHandlers ?? {}),
+  };
+
+  const results: Array<{ connector: FormConnectorConfig; status: 'success' | 'error'; message?: string }> = [];
+
+  for (const connector of connectors) {
+    if (!connector.connectorId) {
+      results.push({
+        connector,
+        status: 'error',
+        message: 'Connector is missing an identifier.',
+      });
+      continue;
+    }
+
+    const payload = renderedPayloads[connector.id] ?? '';
+    const handler = handlerMap[connector.connectorTypeId as SupportedConnectorTypeId];
+
+    if (!handler) {
+      results.push({
+        connector,
+        status: 'error',
+        message: `Connectors of type ${connector.connectorTypeId || 'unknown'} are not supported yet.`,
+      });
+      continue;
+    }
+
+    try {
+      await handler({ connector, http, renderedPayload: payload });
+      results.push({ connector, status: 'success' });
+    } catch (error) {
+      results.push({
+        connector,
+        status: 'error',
+        message: getErrorMessage(error),
+      });
+    }
+  }
+
+  return results;
 };

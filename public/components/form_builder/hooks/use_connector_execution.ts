@@ -3,7 +3,8 @@ import type { CoreStart } from '@kbn/core/public';
 import { i18n } from '@kbn/i18n';
 
 import type { FormConfig } from '../types';
-import { executeFormConnectors } from '../../../services/execute_connectors';
+import type { ExecuteConnectorHandlerMap } from '../utils/shared';
+import { executeConnectorHandlers } from '../utils/shared';
 import { getErrorMessage } from '../utils/shared';
 
 export interface UseConnectorExecutionParams {
@@ -12,6 +13,7 @@ export interface UseConnectorExecutionParams {
   formConfig: FormConfig | null;
   renderedPayloads: Record<string, string>;
   connectorLabelsById: Record<string, string>;
+  handlers?: ExecuteConnectorHandlerMap;
 }
 
 export const useConnectorExecution = ({
@@ -20,6 +22,7 @@ export const useConnectorExecution = ({
   formConfig,
   renderedPayloads,
   connectorLabelsById,
+  handlers,
 }: UseConnectorExecutionParams) => {
   const [isExecuting, setIsExecuting] = useState(false);
 
@@ -41,10 +44,11 @@ export const useConnectorExecution = ({
     setIsExecuting(true);
 
     try {
-      const results = await executeFormConnectors({
+      const results = await executeConnectorHandlers({
         http,
         connectors: formConfig.connectors,
         renderedPayloads,
+        customHandlers: handlers,
       });
 
       const successes = results.filter((result) => result.status === 'success');
