@@ -1,5 +1,20 @@
-import { renderConnectorPayload, getTemplateVariables } from '../shared';
+import { renderConnectorPayload, getTemplateVariables, executeConnectorHandlers } from '../shared';
 import type { FormConnectorConfig, FormFieldConfig } from '../../types';
+import type { CoreStart } from '@kbn/core/public';
+
+const mockHttp = () =>
+  ({
+    post: jest.fn().mockResolvedValue({}),
+  } as unknown as CoreStart['http']);
+
+const connectorConfig = (overrides: Partial<FormConnectorConfig>): FormConnectorConfig => ({
+  id: overrides.id ?? 'connector-1',
+  connectorTypeId: overrides.connectorTypeId ?? '.index',
+  connectorId: overrides.connectorId ?? 'abc',
+  label: overrides.label ?? 'Connector',
+  documentTemplate: overrides.documentTemplate ?? '{"message":"{{msg}}"}',
+  isLabelAuto: overrides.isLabelAuto ?? true,
+});
 
 const connector = (template: string): FormConnectorConfig => ({
   id: 'connector-1',
@@ -63,5 +78,54 @@ describe('getTemplateVariables', () => {
     `;
 
     expect(getTemplateVariables(template)).toEqual(['var1', 'var2', 'var3']);
+  });
+});
+
+describe('executeConnectorHandlers', () => {
+  it('executes supported connectors via http.post and returns success statuses', async () => {
+    const http = mockHttp();
+    const connectors = [connectorConfig({ id: 'conn-1', connectorTypeId: '.index' })];
+    const renderedPayloads = { 'conn-1': '{"msg":"hi"}' };
+
+    const results = await executeConnectorHandlers({
+      http,
+      connectors,
+      renderedPayloads,
+    });
+
+    expect(http.post).toHaveBeenCalledWith('/api/actions/connector/abc/_execute', expect.any(Object));
+    expect(results).toEqual([{ connector: connectors[0], status: 'success' }]);
+  });
+
+  it('returns an error when handler is missing', async () => {
+    const http = mockHttp();
+    const connectors = [connectorConfig({ id: 'conn-1', connectorTypeId: '.unsupported' as any })];
+
+    const results = await executeConnectorHandlers({
+      http,
+      connectors,
+      renderedPayloads: {},
+    });
+
+    expect(results[0]).toEqual({
+      connector: connectors[0],
+      status: 'error',
+      message: 'Connectors of type .unsupported are not supported yet.',
+    });
+  });
+
+  it('returns an error when connectorId is missing', async () => {
+    const connectors = [connectorConfig({ id: 'conn-1', connectorId: '' })];
+    const results = await executeConnectorHandlers({
+      http: mockHttp(),
+      connectors,
+      renderedPayloads: {},
+    });
+
+    expect(results[0]).toEqual({
+      connector: connectors[0],
+      status: 'error',
+      message: 'Connector is missing an identifier.',
+    });
   });
 });
