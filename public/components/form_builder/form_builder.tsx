@@ -13,7 +13,6 @@ import type { SaveResult } from '@kbn/saved-objects-plugin/public';
 
 import {
   FormConfig,
-  FormFieldConfig,
   FormConnectorConfig,
   SupportedConnectorTypeId,
 } from './types';
@@ -26,6 +25,11 @@ import { useConnectorState } from './hooks/use_connector_state';
 import { useConnectorExecution } from './hooks/use_connector_execution';
 import { FormBuilderProvider } from './form_builder_context';
 import FormBuilderLayout from './form_builder_layout';
+import {
+  buildInitialFieldValues,
+  DEFAULT_PAYLOAD_TEMPLATE,
+  getErrorMessage,
+} from './utils/form_helpers';
 import {
   createCustomizableForm,
   updateCustomizableForm,
@@ -47,21 +51,6 @@ interface CustomizableFormBuilderProps {
   history: AppMountParameters['history'];
 }
 
-const getErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) return error.message;
-  if (typeof error === 'string') return error;
-  if (error && typeof error === 'object') {
-    try { return JSON.stringify(error); } catch { return String(error); }
-  }
-  return String(error);
-};
-
-const DEFAULT_TEMPLATE = `{
-  "event_timestamp": "{{timestamp}}",
-  "event_id": "{{id}}",
-  "event_message": "This is an alert raised via Customizable Form. Here's the message: {{message}}"
-}`;
-
 const getConnectorFallbackLabel = (index: number) =>
   i18n.translate('customizableForm.builder.connectorFallbackLabel', {
     defaultMessage: 'Connector {number}',
@@ -75,7 +64,7 @@ const INITIAL_CONNECTORS: FormConnectorConfig[] = [
     connectorId: '',
     label: getConnectorFallbackLabel(0),
     isLabelAuto: true,
-    documentTemplate: DEFAULT_TEMPLATE,
+    documentTemplate: DEFAULT_PAYLOAD_TEMPLATE,
   },
 ];
 
@@ -138,12 +127,6 @@ const INITIAL_SAVED_OBJECT_ATTRIBUTES: CustomizableFormAttributesMeta = {
   title: '',
   description: '',
 };
-
-const buildInitialFieldValues = (fields: FormFieldConfig[]): Record<string, string> =>
-  fields.reduce<Record<string, string>>((acc, field) => {
-    acc[field.id] = '';
-    return acc;
-  }, {});
 
 const toConnectorTypeOptions = (types: Array<ActionType & { id: SupportedConnectorTypeId }>) =>
   types.map((type) => ({ value: type.id, text: type.name }));
@@ -216,7 +199,7 @@ const {
     addConnectorInternal({
       connectorTypes,
       connectors,
-      defaultTemplate: DEFAULT_TEMPLATE,
+      defaultTemplate: DEFAULT_PAYLOAD_TEMPLATE,
     });
   }, [addConnectorInternal, connectorTypes, connectors]);
 

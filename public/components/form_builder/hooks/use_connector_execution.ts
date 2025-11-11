@@ -5,7 +5,7 @@ import { i18n } from '@kbn/i18n';
 import type { FormConfig } from '../types';
 import type { ExecuteConnectorHandlerMap } from '../utils/shared';
 import { executeConnectorHandlers } from '../utils/shared';
-import { getErrorMessage } from '../utils/shared';
+import { getErrorMessage } from '../utils/form_helpers';
 
 export interface UseConnectorExecutionParams {
   http: CoreStart['http'];

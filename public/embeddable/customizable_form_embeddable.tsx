@@ -15,7 +15,6 @@ import { initializeUnsavedChanges } from '@kbn/presentation-containers';
 import { initializeTitleManager, titleComparators } from '@kbn/presentation-publishing';
 
 import { CUSTOMIZABLE_FORM_EMBEDDABLE_TYPE, PLUGIN_ID, PLUGIN_NAME } from '../../common';
-import type { FormConfig } from '../components/form_builder/types';
 import { CustomizableFormPreview } from '../components/form_builder/preview';
 import {
   resolveCustomizableForm,
@@ -37,25 +36,10 @@ import {
 import { useFieldValidation } from '../components/form_builder/hooks/use_field_validation';
 import { usePayloadTemplates } from '../components/form_builder/hooks/use_payload_templates';
 import { useConnectorExecution } from '../components/form_builder/hooks/use_connector_execution';
-
-const buildInitialFieldValues = (config: FormConfig): Record<string, string> =>
-  config.fields.reduce<Record<string, string>>((acc, field) => {
-    acc[field.id] = '';
-    return acc;
-  }, {});
-
-const getErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) return error.message;
-  if (typeof error === 'string') return error;
-  if (error && typeof error === 'object') {
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return String(error);
-    }
-  }
-  return String(error);
-};
+import {
+  buildInitialFieldValues,
+  getErrorMessage,
+} from '../components/form_builder/utils/form_helpers';
 
 const documentFromAttributes = (
   attributes: CustomizableFormSavedObjectAttributes<SerializedFormConfig>
@@ -172,7 +156,7 @@ export const getCustomizableFormEmbeddableFactory = ({
 
         const [document, setDocument] = useState<CustomizableFormDocument | null>(initialDocument);
         const [fieldValues, setFieldValues] = useState<Record<string, string>>(
-          initialDocument ? buildInitialFieldValues(initialDocument.formConfig) : {}
+          initialDocument ? buildInitialFieldValues(initialDocument.formConfig.fields) : {}
         );
         const [isSubmitConfirmationVisible, setIsSubmitConfirmationVisible] = useState(false);
         const [isLoading, setIsLoading] = useState<boolean>(
@@ -211,7 +195,7 @@ export const getCustomizableFormEmbeddableFactory = ({
 
               const loadedDocument = getDocumentFromResolveResponse(resolveResult);
               setDocument(loadedDocument);
-              setFieldValues(buildInitialFieldValues(loadedDocument.formConfig));
+              setFieldValues(buildInitialFieldValues(loadedDocument.formConfig.fields));
 
               updateStateRefs(
                 {

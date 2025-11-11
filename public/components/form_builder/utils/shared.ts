@@ -8,19 +8,7 @@ import {
   type ConnectorSummaryItem,
   type ConnectorSummaryStatus,
 } from '../connector_summary';
-
-export const getErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) return error.message;
-  if (typeof error === 'string') return error;
-  if (error && typeof error === 'object') {
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return String(error);
-    }
-  }
-  return String(error);
-};
+import { getErrorMessage } from './form_helpers';
 
 const getConnectorFallbackLabel = (index: number) => `Connector ${index + 1}`;
 

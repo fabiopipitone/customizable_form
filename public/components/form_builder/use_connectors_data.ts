@@ -6,7 +6,7 @@ import type { ActionConnector } from '@kbn/alerts-ui-shared/src/common/types';
 import type { ActionType } from '@kbn/actions-types';
 
 import type { SupportedConnectorTypeId } from './types';
-import { getErrorMessage } from './utils/shared';
+import { getErrorMessage } from './utils/form_helpers';
 
 const CONNECTOR_TYPE_CANONICAL: Record<string, SupportedConnectorTypeId> = {
   '.index': '.index',
