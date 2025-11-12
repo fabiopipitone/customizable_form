@@ -10,6 +10,7 @@ import type {
   SupportedConnectorTypeId,
 } from './types';
 import { DEFAULT_STRING_SIZE } from './constants';
+import { getDefaultTemplateForConnectorType } from './utils/form_helpers';
 
 const getConnectorFallbackLabel = (index: number) =>
   i18n.translate('customizableForm.builder.connectorFallbackLabel', {
@@ -158,13 +159,15 @@ export const useFormConfigState = ({
         const defaultLabel =
           selectedConnector?.name ?? selectedType?.name ?? getConnectorFallbackLabel(prev.connectors.length);
 
+        const defaultTemplateForType = getDefaultTemplateForConnectorType(defaultTypeId);
+
         const newConnector: FormConnectorConfig = {
           id: `connector-${index}`,
           connectorTypeId: defaultTypeId,
           connectorId: defaultConnectorId,
           label: defaultLabel,
           isLabelAuto: true,
-          documentTemplate: defaultTemplate,
+          documentTemplate: defaultTemplateForType ?? defaultTemplate,
         };
 
         return {
@@ -244,12 +247,20 @@ export const useFormConfigState = ({
         const defaultLabel =
           selectedConnector?.name ?? selectedType?.name ?? getConnectorFallbackLabel(index);
 
+        const previousDefaultTemplate = getDefaultTemplateForConnectorType(
+          connector.connectorTypeId as SupportedConnectorTypeId | '' | null
+        );
+        const nextDefaultTemplate = getDefaultTemplateForConnectorType(canonicalNextTypeId);
+        const shouldResetTemplate =
+          !connector.documentTemplate.trim() || connector.documentTemplate === previousDefaultTemplate;
+
         return {
           ...connector,
           connectorTypeId: canonicalNextTypeId,
           connectorId: nextConnectorIdValue,
           label: wasLabelAuto ? defaultLabel : connector.label,
           isLabelAuto: wasLabelAuto,
+          documentTemplate: shouldResetTemplate ? nextDefaultTemplate : connector.documentTemplate,
         };
       });
     },
@@ -384,12 +395,23 @@ export const useFormConfigState = ({
           const defaultLabel =
             selectedConnectorInstance?.name ?? selectedType?.name ?? getConnectorFallbackLabel(index);
 
+          const previousDefaultTemplate = getDefaultTemplateForConnectorType(
+            connectorConfig.connectorTypeId as SupportedConnectorTypeId | '' | null
+          );
+          const nextDefaultTemplate = getDefaultTemplateForConnectorType(nextTypeId);
+          const shouldResetTemplate =
+            !connectorConfig.documentTemplate.trim() ||
+            connectorConfig.documentTemplate === previousDefaultTemplate;
+
           return {
             ...connectorConfig,
             connectorTypeId: nextTypeId,
             connectorId: resolvedConnectorId,
             label: wasLabelAuto ? defaultLabel : connectorConfig.label,
             isLabelAuto: wasLabelAuto,
+            documentTemplate: shouldResetTemplate
+              ? nextDefaultTemplate
+              : connectorConfig.documentTemplate,
           };
         });
 

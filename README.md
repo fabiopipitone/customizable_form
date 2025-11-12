@@ -14,7 +14,8 @@ This document explains the architecture, development workflow, functional usage,
 
 ### 1.1 High-level summary
 - Supports Kibana `9.1.5` and requires core plugins such as `embeddable`, `visualizations`, `presentationUtil`, `triggersActionsUi`, etc.
-- Goal: create, save, and reuse interactive forms that route submissions to various connectors (`.index` and `.webhook` supported as for now).
+- Goal: create, save, and reuse interactive forms that route submissions to multiple connector types (`.index`, `.webhook`, `.email`, `.jira`, `.teams`).
+- For connectors that require structured parameters (email/Jira/Teams), the payload template must render a JSON object matching the connector `params` schema.
 - Key capabilities: variable validation, per-connector payload templates, optional confirmation modal before executing connectors.
 
 ### 1.2 Architecture map
@@ -128,4 +129,3 @@ common/
 - `public/components/form_builder/use_connectors_data.ts` — encapsulated HTTP fetch for connector types/list with toast reporting (see examples in §2.5).
 
 ---
-

@@ -74,8 +74,8 @@ describe('InfoPanel', () => {
           'conn-2': '{"count":1}',
         },
         templateValidationByConnector: {
-          'conn-1': { missing: ['message'], unused: [] },
-          'conn-2': { missing: [], unused: [{ key: 'foo', label: 'Foo' }] },
+          'conn-1': { missing: ['message'], unused: [], errors: ['Payload problem'] },
+          'conn-2': { missing: [], unused: [{ key: 'foo', label: 'Foo' }], errors: [] },
         },
         connectorSelectionState: {},
         connectorStatusById: {
@@ -166,6 +166,7 @@ describe('InfoPanel', () => {
     expect(screen.getAllByText('Connector A')).toHaveLength(2);
     expect(screen.getAllByText('Connector B')).toHaveLength(2);
     expect(screen.getByText('{"message":"hello"}')).toBeInTheDocument();
+    expect(screen.getByText('Payload problem')).toBeInTheDocument();
     expect(screen.getByText('Missing variables: message.')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: /Connector B/i }));

@@ -13,6 +13,12 @@ const CONNECTOR_TYPE_CANONICAL: Record<string, SupportedConnectorTypeId> = {
   index: '.index',
   '.webhook': '.webhook',
   webhook: '.webhook',
+  '.email': '.email',
+  email: '.email',
+  '.jira': '.jira',
+  jira: '.jira',
+  '.teams': '.teams',
+  teams: '.teams',
 };
 
 export const getCanonicalConnectorTypeId = (id?: string | null): SupportedConnectorTypeId | null => {

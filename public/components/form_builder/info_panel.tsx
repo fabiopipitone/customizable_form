@@ -45,8 +45,8 @@ export const InfoPanel: React.FC = () => {
 
   const activeValidation =
     activePayloadId !== null
-      ? templateValidationByConnector[activePayloadId] ?? { missing: [], unused: [] }
-      : { missing: [], unused: [] };
+      ? templateValidationByConnector[activePayloadId] ?? { missing: [], unused: [], errors: [] }
+      : { missing: [], unused: [], errors: [] };
 
   const activePayload = activePayloadId ? renderedPayloads[activePayloadId] ?? '' : '';
 
@@ -138,6 +138,19 @@ export const InfoPanel: React.FC = () => {
             <EuiCodeBlock language="json" isCopyable>
               {activePayload}
             </EuiCodeBlock>
+
+            {activeValidation.errors.length > 0 ? (
+              <>
+                <EuiSpacer size="s" />
+                <EuiText color="danger" size="s">
+                  <ul style={{ paddingLeft: 18, margin: 0 }}>
+                    {activeValidation.errors.map((error, idx) => (
+                      <li key={`payload-error-${idx}`}>{error}</li>
+                    ))}
+                  </ul>
+                </EuiText>
+              </>
+            ) : null}
 
             {activeValidation.missing.length > 0 ? (
               <>

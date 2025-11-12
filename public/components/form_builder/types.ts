@@ -17,7 +17,7 @@ export interface FormFieldConfig {
   size?: FormFieldSizeConstraint;
 }
 
-export type SupportedConnectorTypeId = '.index' | '.webhook';
+export type SupportedConnectorTypeId = '.index' | '.webhook' | '.email' | '.jira' | '.teams';
 
 export interface FormConnectorConfig {
   id: string;

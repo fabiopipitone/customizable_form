@@ -427,20 +427,30 @@ export const useFormBuilderLifecycle = ({
     [formConfig.connectors, connectorSelectionState]
   );
 
+  const hasBlockingTemplateErrors = useMemo(
+    () =>
+      formConfig.connectors.some((connectorConfig) => {
+        const validation = templateValidationByConnector[connectorConfig.id];
+        if (!validation) {
+          return false;
+        }
+        return (
+          (validation.missing.length ?? 0) > 0 || (validation.errors?.length ?? 0) > 0
+        );
+      }),
+    [formConfig.connectors, templateValidationByConnector]
+  );
+
   const isSaveDisabled = useMemo(
     () =>
       hasEmptyConnectorLabels ||
       hasInvalidConnectorSelections ||
-      formConfig.connectors.some(
-        (connectorConfig) =>
-          (templateValidationByConnector[connectorConfig.id]?.missing.length ?? 0) > 0
-      ) ||
+      hasBlockingTemplateErrors ||
       hasInvalidVariableNames,
     [
-      formConfig.connectors,
-      templateValidationByConnector,
       hasEmptyConnectorLabels,
       hasInvalidConnectorSelections,
+      hasBlockingTemplateErrors,
       hasInvalidVariableNames,
     ]
   );
@@ -465,8 +475,15 @@ export const useFormBuilderLifecycle = ({
     () =>
       formConfig.fields.some((field) => field.required && !(fieldValues[field.id]?.trim())) ||
       hasFieldValidationWarnings ||
+      hasBlockingTemplateErrors ||
       connectorExecution.isExecuting,
-    [formConfig.fields, fieldValues, hasFieldValidationWarnings, connectorExecution.isExecuting]
+    [
+      formConfig.fields,
+      fieldValues,
+      hasFieldValidationWarnings,
+      hasBlockingTemplateErrors,
+      connectorExecution.isExecuting,
+    ]
   );
 
   const handleTestSubmission = useCallback(() => {

@@ -153,9 +153,42 @@ const webhookHandler: ExecuteConnectorHandler = async ({ connector, http, render
   });
 };
 
+const parseJsonParams = (payload: string, connectorTypeId: string) => {
+  const trimmed = payload.trim();
+  if (!trimmed) {
+    throw new Error('Rendered payload is empty.');
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch (error) {
+    throw new Error(`Unable to parse payload as JSON: ${getErrorMessage(error)}`);
+  }
+
+  if (parsed === null || Array.isArray(parsed) || typeof parsed !== 'object') {
+    throw new Error(
+      `Rendered payload for ${connectorTypeId || 'selected'} connectors must be a JSON object representing connector params.`
+    );
+  }
+
+  return parsed as Record<string, unknown>;
+};
+
+const jsonParamsHandler: ExecuteConnectorHandler = async ({ connector, http, renderedPayload }) => {
+  const params = parseJsonParams(renderedPayload, connector.connectorTypeId || '');
+
+  await http.post(`/api/actions/connector/${encodeURIComponent(connector.connectorId)}/_execute`, {
+    body: JSON.stringify({ params }),
+  });
+};
+
 const DEFAULT_HANDLERS: Record<SupportedConnectorTypeId, ExecuteConnectorHandler> = {
   '.index': indexHandler,
   '.webhook': webhookHandler,
+  '.email': jsonParamsHandler,
+  '.jira': jsonParamsHandler,
+  '.teams': jsonParamsHandler,
 };
 
 export const executeConnectorHandlers = async ({

@@ -103,6 +103,35 @@ describe('usePayloadTemplates', () => {
         { key: 'id', label: 'Id' },
         { key: 'extra', label: 'Extra' },
       ],
+      errors: [],
     });
+  });
+
+  it('validates email templates and surfaces errors', () => {
+    const config = formConfig({
+      fields: [],
+      connectors: [
+        {
+          id: 'email-1',
+          connectorTypeId: '.email',
+          connectorId: 'email',
+          label: 'Email',
+          isLabelAuto: true,
+          documentTemplate: '{"subject":"missing recipients","message":""}',
+        },
+      ],
+    });
+
+    const { result } = renderHook(() =>
+      usePayloadTemplates({
+        formConfig: config,
+        fieldValues: {},
+      })
+    );
+
+    expect(result.current.templateValidationByConnector['email-1'].errors).toEqual([
+      'Provide at least one recipient across "to", "cc", or "bcc".',
+      'Field "message" is required and must be a non-empty string.',
+    ]);
   });
 });

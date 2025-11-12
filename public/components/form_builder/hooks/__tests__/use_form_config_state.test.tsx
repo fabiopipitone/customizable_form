@@ -4,6 +4,7 @@ import { useFormConfigState } from '../../use_form_config_state';
 import type { FormConfig, SupportedConnectorTypeId } from '../../types';
 import type { ActionType } from '@kbn/actions-types';
 import type { ActionConnector } from '@kbn/alerts-ui-shared/src/common/types';
+import { DEFAULT_EMAIL_PAYLOAD_TEMPLATE, DEFAULT_PAYLOAD_TEMPLATE } from '../../utils/form_helpers';
 
 const initialConfig: FormConfig = {
   title: 'Form',
@@ -43,8 +44,12 @@ const actionConnector = (
     isSystemAction: false,
   } as ActionConnector & { actionTypeId: SupportedConnectorTypeId });
 
-const connectorTypes = [connectorType('.index'), connectorType('.webhook')];
-const connectors = [actionConnector('c1', '.index'), actionConnector('c2', '.webhook')];
+const connectorTypes = [connectorType('.index'), connectorType('.webhook'), connectorType('.email')];
+const connectors = [
+  actionConnector('c1', '.index'),
+  actionConnector('c2', '.webhook'),
+  actionConnector('email-1', '.email'),
+];
 
 describe('useFormConfigState', () => {
   it('adds and reorders fields', () => {
@@ -80,7 +85,7 @@ describe('useFormConfigState', () => {
     expect(conn.connectorTypeId).toBe('.index');
     expect(conn.connectorId).toBe('c1');
     expect(conn.label).toBe('Connector c1');
-    expect(conn.documentTemplate).toBe('{"test":true}');
+    expect(conn.documentTemplate).toBe(DEFAULT_PAYLOAD_TEMPLATE);
   });
 
   it('handles connector type changes and resets selection when unavailable', () => {
@@ -140,5 +145,42 @@ describe('useFormConfigState', () => {
       });
     });
     expect(result.current.formConfig.connectors[0].connectorId).toBe('c2');
+  });
+
+  it('applies email default template when switching types if template is untouched', () => {
+    const configWithConnector: FormConfig = {
+      ...initialConfig,
+      connectors: [
+        {
+          id: 'connector-1',
+          connectorTypeId: '.index',
+          connectorId: 'c1',
+          label: 'Connector 1',
+          isLabelAuto: true,
+          documentTemplate: DEFAULT_PAYLOAD_TEMPLATE,
+        },
+      ],
+    };
+    const { result } = renderHook(() => useFormConfigState({ initialConfig: configWithConnector }));
+
+    act(() => {
+      result.current.handleConnectorTypeChange('connector-1', '.email', {
+        connectorTypes,
+        connectors,
+      });
+    });
+    expect(result.current.formConfig.connectors[0].documentTemplate).toBe(
+      DEFAULT_EMAIL_PAYLOAD_TEMPLATE
+    );
+
+    act(() => {
+      result.current.handleConnectorTemplateChange('connector-1', '{"custom":true}');
+      result.current.handleConnectorTypeChange('connector-1', '.webhook', {
+        connectorTypes,
+        connectors,
+      });
+    });
+
+    expect(result.current.formConfig.connectors[0].documentTemplate).toBe('{"custom":true}');
   });
 });

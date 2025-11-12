@@ -51,6 +51,7 @@ export const PayloadTab = () => {
           const validation = templateValidationByConnector[connectorConfig.id] ?? {
             missing: [],
             unused: [],
+            errors: [],
           };
 
           const summary = connectorSummaries.find((item) => item.config.id === connectorConfig.id);
@@ -90,7 +91,7 @@ export const PayloadTab = () => {
                   })}
                   helpText={i18n.translate('customizableForm.builder.templateHelpText', {
                     defaultMessage:
-                      'Use the variables defined above to compose a valid JSON document. Example: {example}.',
+                      'Use the variables defined in the Fields tab to compose a valid JSON document. Example: {example}.',
                     values: { example: '{{message}}' },
                   })}
                 >
@@ -104,6 +105,19 @@ export const PayloadTab = () => {
                     rows={10}
                   />
                 </EuiFormRow>
+
+                {validation.errors.length > 0 ? (
+                  <>
+                    <EuiText color="danger" size="s">
+                      <ul style={{ paddingLeft: 18, margin: 0 }}>
+                        {validation.errors.map((error, idx) => (
+                          <li key={`payload-error-${connectorConfig.id}-${idx}`}>{error}</li>
+                        ))}
+                      </ul>
+                    </EuiText>
+                    <EuiSpacer size="s" />
+                  </>
+                ) : null}
 
                 {validation.missing.length > 0 ? (
                   <EuiText color="danger" size="s">
