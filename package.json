@@ -1,6 +1,6 @@
 {
   "name": "customizableForm",
-  "version": "0.3.29",
+  "version": "0.3.30",
   "private": true,
   "scripts": {
     "bootstrap": "yarn kbn bootstrap && yarn install",
