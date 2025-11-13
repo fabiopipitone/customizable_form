@@ -468,6 +468,7 @@ export const useFormBuilderLifecycle = ({
     toasts,
     formConfig,
     buildRenderedPayloads,
+    fieldValues,
     connectorLabelsById,
   });
 

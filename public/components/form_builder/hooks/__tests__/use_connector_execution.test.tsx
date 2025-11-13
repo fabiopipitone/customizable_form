@@ -4,6 +4,7 @@ import type { IToasts } from '@kbn/core-notifications-browser';
 import { useConnectorExecution } from '../use_connector_execution';
 import type { FormConfig, SupportedConnectorTypeId } from '../../types';
 import { executeConnectorHandlers } from '../../utils/shared';
+import { logSubmission } from '../../../../services/submission_logger';
 
 jest.mock('../../utils/shared', () => {
   const actual = jest.requireActual('../../utils/shared');
@@ -12,6 +13,10 @@ jest.mock('../../utils/shared', () => {
     executeConnectorHandlers: jest.fn(),
   };
 });
+
+jest.mock('../../../../services/submission_logger', () => ({
+  logSubmission: jest.fn().mockResolvedValue(undefined),
+}));
 
 const mockToasts = (): IToasts => ({
   get$: jest.fn(),
@@ -57,6 +62,7 @@ describe('useConnectorExecution', () => {
         toasts,
         formConfig: { ...formConfig, connectors: [] },
         buildRenderedPayloads: jest.fn().mockReturnValue({}),
+        fieldValues: {},
         connectorLabelsById: {},
       })
     );
@@ -82,6 +88,7 @@ describe('useConnectorExecution', () => {
         toasts,
         formConfig,
         buildRenderedPayloads,
+        fieldValues: {},
         connectorLabelsById: { '1': 'Connector 1' },
       })
     );
@@ -91,6 +98,7 @@ describe('useConnectorExecution', () => {
     });
 
     expect(buildRenderedPayloads).toHaveBeenCalled();
+    expect(logSubmission).toHaveBeenCalled();
     expect(toasts.addSuccess).toHaveBeenCalled();
     expect(toasts.addDanger).toHaveBeenCalled();
   });

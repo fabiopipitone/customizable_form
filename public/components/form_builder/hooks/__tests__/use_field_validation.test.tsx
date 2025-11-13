@@ -92,4 +92,29 @@ describe('useFieldValidation', () => {
     expect(result.current.hasInvalidVariableNames).toBe(true);
     expect(result.current.hasFieldValidationWarnings).toBe(true);
   });
+
+  it('rejects reserved submission timestamp variable name', () => {
+    const formConfig = buildFormConfig({
+      fields: [
+        {
+          id: 'field-1',
+          key: '__submission_timestamp__',
+          label: 'Reserved',
+          type: 'text',
+          required: false,
+          dataType: 'string',
+        },
+      ],
+    });
+
+    const { result } = renderHook(() =>
+      useFieldValidation({
+        formConfig,
+        fieldValues: { 'field-1': 'value' },
+      })
+    );
+
+    expect(result.current.variableNameValidationById['field-1'].isValid).toBe(false);
+    expect(result.current.hasInvalidVariableNames).toBe(true);
+  });
 });

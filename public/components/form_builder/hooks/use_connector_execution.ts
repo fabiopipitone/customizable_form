@@ -6,6 +6,7 @@ import type { FormConfig } from '../types';
 import type { ExecuteConnectorHandlerMap } from '../utils/shared';
 import { executeConnectorHandlers } from '../utils/shared';
 import { getErrorMessage } from '../utils/form_helpers';
+import { logSubmission } from '../../../services/submission_logger';
 import { SUBMISSION_TIMESTAMP_VARIABLE } from '../constants';
 
 export interface UseConnectorExecutionParams {
@@ -13,6 +14,7 @@ export interface UseConnectorExecutionParams {
   toasts: CoreStart['notifications']['toasts'];
   formConfig: FormConfig | null;
   buildRenderedPayloads: (extraVariables?: Record<string, string>) => Record<string, string>;
+  fieldValues: Record<string, string>;
   connectorLabelsById: Record<string, string>;
   handlers?: ExecuteConnectorHandlerMap;
 }
@@ -22,6 +24,7 @@ export const useConnectorExecution = ({
   toasts,
   formConfig,
   buildRenderedPayloads,
+  fieldValues,
   connectorLabelsById,
   handlers,
 }: UseConnectorExecutionParams) => {
@@ -48,6 +51,44 @@ export const useConnectorExecution = ({
       const submissionTimestamp = new Date().toISOString();
       const renderedPayloads = buildRenderedPayloads({
         [SUBMISSION_TIMESTAMP_VARIABLE]: submissionTimestamp,
+      });
+
+      const fieldsLog = formConfig.fields.reduce<Record<string, unknown>>((acc, field) => {
+        const key = field.key.trim();
+        if (!key) {
+          return acc;
+        }
+        acc[key] = fieldValues[field.id] ?? '';
+        return acc;
+      }, {});
+
+      const connectorsLog = formConfig.connectors.map((connector) => {
+        const raw = renderedPayloads[connector.id] ?? '';
+        let payload: unknown = raw;
+        try {
+          payload = raw ? JSON.parse(raw) : raw;
+        } catch {
+          // keep string
+        }
+        return {
+          id: connector.id,
+          label: connector.label?.trim() || undefined,
+          type: connector.connectorTypeId?.replace(/^\./, '') ?? connector.connectorTypeId,
+          connector_id: connector.connectorId || undefined,
+          payload,
+          raw_payload: raw,
+        };
+      });
+
+      logSubmission(http, {
+        '@timestamp': submissionTimestamp,
+        form_title: formConfig.title,
+        form_description: formConfig.description,
+        fields: fieldsLog,
+        connectors: connectorsLog,
+      }).catch((error: unknown) => {
+        // eslint-disable-next-line no-console
+        console.debug('customizableForm: failed to log submission', error);
       });
 
       const results = await executeConnectorHandlers({
@@ -103,7 +144,7 @@ export const useConnectorExecution = ({
     } finally {
       setIsExecuting(false);
     }
-  }, [formConfig, buildRenderedPayloads, http, toasts, connectorLabelsById, handlers]);
+  }, [formConfig, buildRenderedPayloads, http, fieldValues, toasts, connectorLabelsById, handlers]);
 
   return {
     executeNow,

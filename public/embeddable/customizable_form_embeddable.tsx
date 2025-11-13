@@ -327,6 +327,7 @@ export const getCustomizableFormEmbeddableFactory = ({
           toasts,
           formConfig: document ? document.formConfig : null,
           buildRenderedPayloads,
+          fieldValues,
           connectorLabelsById,
         });
 
