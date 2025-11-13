@@ -69,6 +69,20 @@ describe('renderConnectorPayload', () => {
     expect(renderConnectorPayload({ connectorConfig: connector(template), fields, fieldValues: { 'field-1': 'foo' } }))
       .toEqual('constant text');
   });
+
+  it('allows extra variables to override values', () => {
+    const fields = [formField({ id: 'field-1', key: 'message' })];
+    const template = `{{message}} {{__submission_timestamp__}}`;
+
+    expect(
+      renderConnectorPayload({
+        connectorConfig: connector(template),
+        fields,
+        fieldValues: { 'field-1': 'hi' },
+        extraVariables: { __submission_timestamp__: '2024-01-01T00:00:00Z' },
+      })
+    ).toEqual('hi 2024-01-01T00:00:00Z');
+  });
 });
 
 describe('getTemplateVariables', () => {

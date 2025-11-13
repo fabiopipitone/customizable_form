@@ -56,7 +56,7 @@ describe('useConnectorExecution', () => {
         http: {} as any,
         toasts,
         formConfig: { ...formConfig, connectors: [] },
-        renderedPayloads: {},
+        buildRenderedPayloads: jest.fn().mockReturnValue({}),
         connectorLabelsById: {},
       })
     );
@@ -71,6 +71,7 @@ describe('useConnectorExecution', () => {
 
   it('shows success and error toasts based on execution results', async () => {
     const toasts = mockToasts();
+    const buildRenderedPayloads = jest.fn().mockReturnValue({ '1': '{}' });
     (executeConnectorHandlers as jest.Mock).mockResolvedValue([
       { connector: formConfig.connectors[0], status: 'success' as const },
       { connector: formConfig.connectors[0], status: 'error' as const, message: 'boom' },
@@ -80,7 +81,7 @@ describe('useConnectorExecution', () => {
         http: {} as any,
         toasts,
         formConfig,
-        renderedPayloads: { '1': '{}' },
+        buildRenderedPayloads,
         connectorLabelsById: { '1': 'Connector 1' },
       })
     );
@@ -89,6 +90,7 @@ describe('useConnectorExecution', () => {
       await result.current.executeNow();
     });
 
+    expect(buildRenderedPayloads).toHaveBeenCalled();
     expect(toasts.addSuccess).toHaveBeenCalled();
     expect(toasts.addDanger).toHaveBeenCalled();
   });

@@ -370,7 +370,7 @@ export const useFormBuilderLifecycle = ({
     hasInvalidVariableNames,
   } = useFieldValidation({ formConfig, fieldValues });
 
-  const { renderedPayloads, templateValidationByConnector } = usePayloadTemplates({
+  const { renderedPayloads, templateValidationByConnector, buildRenderedPayloads } = usePayloadTemplates({
     formConfig,
     fieldValues,
   });
@@ -467,7 +467,7 @@ export const useFormBuilderLifecycle = ({
     http,
     toasts,
     formConfig,
-    renderedPayloads,
+    buildRenderedPayloads,
     connectorLabelsById,
   });
 

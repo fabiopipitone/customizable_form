@@ -85,17 +85,23 @@ export const renderConnectorPayload = ({
   connectorConfig,
   fields,
   fieldValues,
+  extraVariables,
 }: {
   connectorConfig: FormConnectorConfig;
   fields: FormFieldConfig[];
   fieldValues: Record<string, string>;
+  extraVariables?: Record<string, string>;
 }): string => {
-  const valueMap = fields.reduce<Record<string, string>>((acc, field) => {
+  const valueMap = { ...(extraVariables ?? {}) };
+
+  fields.forEach((field) => {
     if (field.key) {
-      acc[field.key.trim()] = fieldValues[field.id] ?? '';
+      const trimmed = field.key.trim();
+      if (trimmed && !(trimmed in valueMap)) {
+        valueMap[trimmed] = fieldValues[field.id] ?? '';
+      }
     }
-    return acc;
-  }, {});
+  });
 
   return connectorConfig.documentTemplate.replace(TEMPLATE_VARIABLE_REGEX, (_, variable: string) => {
     const trimmed = variable.trim();

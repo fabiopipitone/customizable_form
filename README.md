@@ -145,6 +145,8 @@ Some connectors require a specific JSON structure. The builder enforces the most
 
   Optional fields are not supported; any extra keys will trigger an error in the builder.
 
+- **Submission timestamp** — regardless of connector type, you can inject the ISO timestamp of the submission via `{{__submission_timestamp__}}`. The actual value is filled when the user clicks Submit.
+
 Invalid structures surface directly in the Payload tab and block both Save and Submit.
 
 ---

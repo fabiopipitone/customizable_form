@@ -242,7 +242,7 @@ export const getCustomizableFormEmbeddableFactory = ({
         }, []);
 
         const formConfig = document?.formConfig ?? null;
-        const { renderedPayloads } = usePayloadTemplates({
+        const { buildRenderedPayloads } = usePayloadTemplates({
           formConfig,
           fieldValues,
         });
@@ -326,7 +326,7 @@ export const getCustomizableFormEmbeddableFactory = ({
           http,
           toasts,
           formConfig: document ? document.formConfig : null,
-          renderedPayloads,
+          buildRenderedPayloads,
           connectorLabelsById,
         });
 

@@ -4,6 +4,7 @@ import type { FormConfig } from '../types';
 import type { FieldValidationResult } from '../preview';
 import { getFieldValidationResult } from '../preview';
 import { validateVariableName, type VariableNameValidationResult } from '../validation';
+import { SUBMISSION_TIMESTAMP_VARIABLE } from '../constants';
 
 interface UseFieldValidationParams {
   formConfig: FormConfig | null;
@@ -26,13 +27,18 @@ export const useFieldValidation = ({
 
   const variableNameValidationById = useMemo(() => {
     const trimmedNames = fields.map((field) => field.key.trim());
-    return fields.reduce<Record<string, VariableNameValidationResult>>(
-      (acc, field) => {
-        acc[field.id] = validateVariableName({ value: field.key, existingNames: trimmedNames });
-        return acc;
-      },
-      {}
-    );
+    return fields.reduce<Record<string, VariableNameValidationResult>>((acc, field) => {
+      const trimmedKey = field.key.trim();
+      let result = validateVariableName({ value: field.key, existingNames: trimmedNames });
+      if (trimmedKey === SUBMISSION_TIMESTAMP_VARIABLE) {
+        result = {
+          isValid: false,
+          message: `"${SUBMISSION_TIMESTAMP_VARIABLE}" is reserved and cannot be used as a custom variable name.`,
+        };
+      }
+      acc[field.id] = result;
+      return acc;
+    }, {});
   }, [fields]);
 
   const hasFieldValidationWarnings = useMemo(

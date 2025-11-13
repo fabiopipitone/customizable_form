@@ -6,12 +6,13 @@ import type { FormConfig } from '../types';
 import type { ExecuteConnectorHandlerMap } from '../utils/shared';
 import { executeConnectorHandlers } from '../utils/shared';
 import { getErrorMessage } from '../utils/form_helpers';
+import { SUBMISSION_TIMESTAMP_VARIABLE } from '../constants';
 
 export interface UseConnectorExecutionParams {
   http: CoreStart['http'];
   toasts: CoreStart['notifications']['toasts'];
   formConfig: FormConfig | null;
-  renderedPayloads: Record<string, string>;
+  buildRenderedPayloads: (extraVariables?: Record<string, string>) => Record<string, string>;
   connectorLabelsById: Record<string, string>;
   handlers?: ExecuteConnectorHandlerMap;
 }
@@ -20,7 +21,7 @@ export const useConnectorExecution = ({
   http,
   toasts,
   formConfig,
-  renderedPayloads,
+  buildRenderedPayloads,
   connectorLabelsById,
   handlers,
 }: UseConnectorExecutionParams) => {
@@ -44,6 +45,11 @@ export const useConnectorExecution = ({
     setIsExecuting(true);
 
     try {
+      const submissionTimestamp = new Date().toISOString();
+      const renderedPayloads = buildRenderedPayloads({
+        [SUBMISSION_TIMESTAMP_VARIABLE]: submissionTimestamp,
+      });
+
       const results = await executeConnectorHandlers({
         http,
         connectors: formConfig.connectors,
@@ -97,7 +103,7 @@ export const useConnectorExecution = ({
     } finally {
       setIsExecuting(false);
     }
-  }, [formConfig, renderedPayloads, http, toasts, connectorLabelsById, handlers]);
+  }, [formConfig, buildRenderedPayloads, http, toasts, connectorLabelsById, handlers]);
 
   return {
     executeNow,

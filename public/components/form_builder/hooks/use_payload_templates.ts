@@ -1,8 +1,12 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 
 import type { FormConfig, SupportedConnectorTypeId } from '../types';
 import { getTemplateVariables, renderConnectorPayload } from '../utils/shared';
 import { validateConnectorPayloadTemplate } from '../validation/payloads';
+import {
+  SUBMISSION_TIMESTAMP_PLACEHOLDER,
+  SUBMISSION_TIMESTAMP_VARIABLE,
+} from '../constants';
 
 export interface ConnectorTemplateValidation {
   missing: string[];
@@ -20,20 +24,34 @@ export const usePayloadTemplates = ({ formConfig, fieldValues }: UsePayloadTempl
   const connectors = formConfig?.connectors ?? [];
   const fields = formConfig?.fields ?? [];
 
-  const renderedPayloads = useMemo(() => {
-    if (!formConfig) {
-      return {};
-    }
+  const buildRenderedPayloads = useCallback(
+    (extraVariables?: Record<string, string>) => {
+      if (!formConfig) {
+        return {};
+      }
 
-    return connectors.reduce<Record<string, string>>((acc, connectorConfig) => {
-      acc[connectorConfig.id] = renderConnectorPayload({
-        connectorConfig,
-        fields,
-        fieldValues,
-      });
-      return acc;
-    }, {});
-  }, [formConfig, connectors, fields, fieldValues]);
+      return connectors.reduce<Record<string, string>>((acc, connectorConfig) => {
+        acc[connectorConfig.id] = renderConnectorPayload({
+          connectorConfig,
+          fields,
+          fieldValues,
+          extraVariables,
+        });
+        return acc;
+      }, {});
+    },
+    [formConfig, connectors, fields, fieldValues]
+  );
+
+  const placeholderExtras = useMemo(
+    () => ({ [SUBMISSION_TIMESTAMP_VARIABLE]: SUBMISSION_TIMESTAMP_PLACEHOLDER }),
+    []
+  );
+
+  const renderedPayloads = useMemo(
+    () => buildRenderedPayloads(placeholderExtras),
+    [buildRenderedPayloads, placeholderExtras]
+  );
 
   const templateValidationByConnector = useMemo(() => {
     if (!formConfig) {
@@ -41,6 +59,7 @@ export const usePayloadTemplates = ({ formConfig, fieldValues }: UsePayloadTempl
     }
 
     const definedKeys = new Set(fields.map((field) => field.key.trim()).filter((key) => key.length > 0));
+    definedKeys.add(SUBMISSION_TIMESTAMP_VARIABLE);
     return connectors.reduce<Record<string, ConnectorTemplateValidation>>((acc, connectorConfig) => {
       const variables = getTemplateVariables(connectorConfig.documentTemplate);
       const missing = variables.filter((variable) => !definedKeys.has(variable));
@@ -76,5 +95,6 @@ export const usePayloadTemplates = ({ formConfig, fieldValues }: UsePayloadTempl
   return {
     renderedPayloads,
     templateValidationByConnector,
+    buildRenderedPayloads,
   };
 };

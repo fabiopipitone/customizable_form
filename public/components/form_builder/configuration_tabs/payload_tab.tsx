@@ -33,6 +33,13 @@ export const PayloadTab = () => {
       </EuiTitle>
 
       <EuiSpacer size="s" />
+      <EuiText size="s" color="subdued">
+        {i18n.translate('customizableForm.builder.payloadReservedVariableNote', {
+          defaultMessage:
+            'Tip: use {{__submission_timestamp__}} to insert the submission time (UTC) when the form is submitted.',
+        })}
+      </EuiText>
+      <EuiSpacer size="s" />
 
       {formConfig.connectors.length === 0 ? (
         <EuiEmptyPrompt
