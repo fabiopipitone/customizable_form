@@ -42,9 +42,14 @@ export const DEFAULT_JIRA_PAYLOAD_TEMPLATE = `{
   }
 }`;
 
+export const DEFAULT_TEAMS_PAYLOAD_TEMPLATE = `{
+  "message": "{{message}}"
+}`;
+
 const CONNECTOR_TEMPLATE_OVERRIDES: Partial<Record<SupportedConnectorTypeId, string>> = {
   '.email': DEFAULT_EMAIL_PAYLOAD_TEMPLATE,
   '.jira': DEFAULT_JIRA_PAYLOAD_TEMPLATE,
+  '.teams': DEFAULT_TEAMS_PAYLOAD_TEMPLATE,
 };
 
 export const getDefaultTemplateForConnectorType = (

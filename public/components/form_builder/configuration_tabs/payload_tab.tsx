@@ -186,6 +186,10 @@ const getPayloadHint = (typeId: SupportedConnectorTypeId | '' | null) => {
         defaultMessage:
           'Allowed fields: summary, description, issueType, priority, parent, labels, comments[].comment. Use the exact values/IDs from Jira.',
       });
+    case '.teams':
+      return i18n.translate('customizableForm.builder.payloadHelp.teams', {
+        defaultMessage: 'Allowed fields: message.',
+      });
     default:
       return null;
   }

@@ -194,4 +194,30 @@ describe('usePayloadTemplates', () => {
       'Ensure the specified parent issue already exists in Jira; otherwise the connector execution may fail.',
     ]);
   });
+
+  it('validates teams templates', () => {
+    const config = formConfig({
+      connectors: [
+        {
+          id: 'teams-1',
+          connectorTypeId: '.teams',
+          connectorId: 'teams',
+          label: 'Teams',
+          isLabelAuto: true,
+          documentTemplate: '{"message":""}',
+        },
+      ],
+    });
+
+    const { result } = renderHook(() =>
+      usePayloadTemplates({
+        formConfig: config,
+        fieldValues: {},
+      })
+    );
+
+    expect(result.current.templateValidationByConnector['teams-1'].errors).toEqual([
+      'Field "message" is required and must be a non-empty string.',
+    ]);
+  });
 });

@@ -1,6 +1,7 @@
 import type { SupportedConnectorTypeId } from '../../types';
 import { validateEmailPayload } from './email';
 import { validateJiraPayload } from './jira';
+import { validateTeamsPayload } from './teams';
 import type {
   ConnectorPayloadValidationResult,
   ConnectorPayloadValidator,
@@ -9,6 +10,7 @@ import type {
 const CONNECTOR_PAYLOAD_VALIDATORS: Partial<Record<SupportedConnectorTypeId, ConnectorPayloadValidator>> = {
   '.email': validateEmailPayload,
   '.jira': validateJiraPayload,
+  '.teams': validateTeamsPayload,
 };
 
 export const validateConnectorPayloadTemplate = ({

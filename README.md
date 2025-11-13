@@ -117,7 +117,7 @@ Some connectors require a specific JSON structure. The builder enforces the most
 
   Optional fields such as `cc`, `bcc`, `messageHTML`, and `attachments` are supported, but the validator requires at least one recipient plus subject/message strings.
 
-- **Jira (`.jira`)** — the template must render a `pushToService` payload with strict values for issue type and priority:
+- **Jira (`.jira`)** — the template must render a `pushToService` payload:
 
   ```json
   {
@@ -134,6 +134,16 @@ Some connectors require a specific JSON structure. The builder enforces the most
   ```
 
   You may add `issueType`, `priority`, `parent`, `labels`, or `comments` manually, but copy the exact values/IDs from the Jira connector test panel (or your Jira project) to avoid downstream failures. Additional fields are intentionally blocked.
+
+- **Microsoft Teams (`.teams`)** — payloads must include the `message` field:
+
+  ```json
+  {
+    "message": "{{message}}"
+  }
+  ```
+
+  Optional fields are not supported; any extra keys will trigger an error in the builder.
 
 Invalid structures surface directly in the Payload tab and block both Save and Submit.
 

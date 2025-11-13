@@ -7,6 +7,7 @@ import type { ActionConnector } from '@kbn/alerts-ui-shared/src/common/types';
 import {
   DEFAULT_EMAIL_PAYLOAD_TEMPLATE,
   DEFAULT_JIRA_PAYLOAD_TEMPLATE,
+  DEFAULT_TEAMS_PAYLOAD_TEMPLATE,
   DEFAULT_PAYLOAD_TEMPLATE,
 } from '../../utils/form_helpers';
 
@@ -58,6 +59,7 @@ const connectors = [
   actionConnector('c1', '.index'),
   actionConnector('c2', '.webhook'),
   actionConnector('email-1', '.email'),
+  actionConnector('teams-1', '.teams'),
   actionConnector('jira-1', '.jira'),
 ];
 
@@ -218,6 +220,43 @@ describe('useFormConfigState', () => {
     });
     expect(result.current.formConfig.connectors[0].documentTemplate).toBe(
       DEFAULT_JIRA_PAYLOAD_TEMPLATE
+    );
+
+    act(() => {
+      result.current.handleConnectorTemplateChange('connector-1', '{"custom":true}');
+      result.current.handleConnectorTypeChange('connector-1', '.webhook', {
+        connectorTypes,
+        connectors,
+      });
+    });
+
+    expect(result.current.formConfig.connectors[0].documentTemplate).toBe('{"custom":true}');
+  });
+
+  it('applies teams default template when switching types if template is untouched', () => {
+    const configWithConnector: FormConfig = {
+      ...initialConfig,
+      connectors: [
+        {
+          id: 'connector-1',
+          connectorTypeId: '.index',
+          connectorId: 'c1',
+          label: 'Connector 1',
+          isLabelAuto: true,
+          documentTemplate: DEFAULT_PAYLOAD_TEMPLATE,
+        },
+      ],
+    };
+    const { result } = renderHook(() => useFormConfigState({ initialConfig: configWithConnector }));
+
+    act(() => {
+      result.current.handleConnectorTypeChange('connector-1', '.teams', {
+        connectorTypes,
+        connectors,
+      });
+    });
+    expect(result.current.formConfig.connectors[0].documentTemplate).toBe(
+      DEFAULT_TEAMS_PAYLOAD_TEMPLATE
     );
 
     act(() => {
