@@ -2,12 +2,13 @@ import { useMemo } from 'react';
 
 import type { FormConfig, SupportedConnectorTypeId } from '../types';
 import { getTemplateVariables, renderConnectorPayload } from '../utils/shared';
-import { validateConnectorPayloadTemplate } from '../validation/email_payload';
+import { validateConnectorPayloadTemplate } from '../validation/payloads';
 
 export interface ConnectorTemplateValidation {
   missing: string[];
   unused: Array<{ key: string; label: string }>;
   errors: string[];
+  warnings: string[];
 }
 
 interface UsePayloadTemplatesParams {
@@ -57,7 +58,7 @@ export const usePayloadTemplates = ({ formConfig, fieldValues }: UsePayloadTempl
         })
         .filter((field): field is { key: string; label: string } => field !== null);
 
-      const errors = validateConnectorPayloadTemplate({
+      const { errors, warnings } = validateConnectorPayloadTemplate({
         connectorTypeId: connectorConfig.connectorTypeId as SupportedConnectorTypeId | '' | null,
         template: connectorConfig.documentTemplate,
       });
@@ -66,6 +67,7 @@ export const usePayloadTemplates = ({ formConfig, fieldValues }: UsePayloadTempl
         missing,
         unused,
         errors,
+        warnings,
       };
       return acc;
     }, {});

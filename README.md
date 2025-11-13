@@ -101,6 +101,44 @@ common/
 
 ---
 
+## 3. Structured connector payloads
+
+Some connectors require a specific JSON structure. The builder enforces the most common subset of rules so users catch mistakes before hitting the connector API.
+
+- **Email (`.email`)** — the template must render:
+
+  ```json
+  {
+    "to": ["<target email address>"],
+    "subject": "<email subject>",
+    "message": "<email message>"
+  }
+  ```
+
+  Optional fields such as `cc`, `bcc`, `messageHTML`, and `attachments` are supported, but the validator requires at least one recipient plus subject/message strings.
+
+- **Jira (`.jira`)** — the template must render a `pushToService` payload with strict values for issue type and priority:
+
+  ```json
+  {
+    "subAction": "pushToService",
+    "subActionParams": {
+      "incident": {
+        "summary": "<issue summary>",
+        "description": "<issue description>",
+        "issueType": "Task",
+        "priority": "Medium"
+      }
+    }
+  }
+  ```
+
+  You may add `issueType`, `priority`, `parent`, `labels`, or `comments` manually, but copy the exact values/IDs from the Jira connector test panel (or your Jira project) to avoid downstream failures. Additional fields are intentionally blocked.
+
+Invalid structures surface directly in the Payload tab and block both Save and Submit.
+
+---
+
 ## Appendices
 
 ### A. Testing matrix (excerpt)

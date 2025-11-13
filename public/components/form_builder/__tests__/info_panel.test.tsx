@@ -74,8 +74,18 @@ describe('InfoPanel', () => {
           'conn-2': '{"count":1}',
         },
         templateValidationByConnector: {
-          'conn-1': { missing: ['message'], unused: [], errors: ['Payload problem'] },
-          'conn-2': { missing: [], unused: [{ key: 'foo', label: 'Foo' }], errors: [] },
+          'conn-1': {
+            missing: ['message'],
+            unused: [],
+            errors: ['Payload problem'],
+            warnings: ['Parent issue must exist'],
+          },
+          'conn-2': {
+            missing: [],
+            unused: [{ key: 'foo', label: 'Foo' }],
+            errors: [],
+            warnings: [],
+          },
         },
         connectorSelectionState: {},
         connectorStatusById: {
@@ -168,6 +178,7 @@ describe('InfoPanel', () => {
     expect(screen.getByText('{"message":"hello"}')).toBeInTheDocument();
     expect(screen.getByText('Payload problem')).toBeInTheDocument();
     expect(screen.getByText('Missing variables: message.')).toBeInTheDocument();
+    expect(screen.getByText('Parent issue must exist')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: /Connector B/i }));
 

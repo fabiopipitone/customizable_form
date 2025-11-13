@@ -5,6 +5,7 @@ import {
   EuiEmptyPrompt,
   EuiFormRow,
   EuiIcon,
+  EuiIconTip,
   EuiSpacer,
   EuiText,
   EuiTextArea,
@@ -12,6 +13,7 @@ import {
 } from '@elastic/eui';
 
 import { useFormBuilderContext } from '../form_builder_context';
+import type { SupportedConnectorTypeId } from '../types';
 
 export const PayloadTab = () => {
   const {
@@ -52,6 +54,7 @@ export const PayloadTab = () => {
             missing: [],
             unused: [],
             errors: [],
+            warnings: [],
           };
 
           const summary = connectorSummaries.find((item) => item.config.id === connectorConfig.id);
@@ -64,12 +67,22 @@ export const PayloadTab = () => {
               }));
 
           const connectorStatus = connectorStatusById[connectorConfig.id];
+          const connectorTypeId = connectorConfig.connectorTypeId as SupportedConnectorTypeId | '' | null;
+          const payloadHelp = getPayloadHint(connectorTypeId);
           const showTemplateErrorIcon = connectorStatus?.hasTemplateError;
           const showTemplateWarningIcon =
             connectorStatus && !connectorStatus.hasTemplateError && connectorStatus.hasTemplateWarning;
           const templateAccordionLabel = (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <span>{label}</span>
+              {payloadHelp ? (
+                <EuiIconTip
+                  type="iInCircle"
+                  content={payloadHelp}
+                  size="s"
+                  color="subdued"
+                />
+              ) : null}
               {showTemplateErrorIcon ? <EuiIcon type="alert" color="danger" size="s" /> : null}
               {showTemplateWarningIcon ? <EuiIcon type="warning" color="warning" size="s" /> : null}
             </span>
@@ -128,6 +141,19 @@ export const PayloadTab = () => {
                   </EuiText>
                 ) : null}
 
+                {validation.warnings.length > 0 ? (
+                  <>
+                    <EuiSpacer size="s" />
+                    <EuiText color="warning" size="s">
+                      <ul style={{ paddingLeft: 18, margin: 0 }}>
+                        {validation.warnings.map((warning, idx) => (
+                          <li key={`payload-warn-${connectorConfig.id}-${idx}`}>{warning}</li>
+                        ))}
+                      </ul>
+                    </EuiText>
+                  </>
+                ) : null}
+
                 {validation.missing.length === 0 && validation.unused.length > 0 ? (
                   <EuiText color="warning" size="s">
                     {i18n.translate('customizableForm.builder.templateUnusedFieldsWarning', {
@@ -147,4 +173,20 @@ export const PayloadTab = () => {
       )}
     </>
   );
+};
+
+const getPayloadHint = (typeId: SupportedConnectorTypeId | '' | null) => {
+  switch (typeId) {
+    case '.email':
+      return i18n.translate('customizableForm.builder.payloadHelp.email', {
+        defaultMessage: 'Allowed fields: to, cc, bcc, subject, message, messageHTML, attachments.',
+      });
+    case '.jira':
+      return i18n.translate('customizableForm.builder.payloadHelp.jira', {
+        defaultMessage:
+          'Allowed fields: summary, description, issueType, priority, parent, labels, comments[].comment. Use the exact values/IDs from Jira.',
+      });
+    default:
+      return null;
+  }
 };

@@ -31,7 +31,12 @@ interface UseConnectorStateParams {
   isLoadingConnectors: boolean;
   templateValidationByConnector: Record<
     string,
-    { missing: string[]; unused: Array<{ key: string; label: string }>; errors: string[] }
+    {
+      missing: string[];
+      unused: Array<{ key: string; label: string }>;
+      errors: string[];
+      warnings: string[];
+    }
   >;
 }
 
@@ -87,6 +92,7 @@ export const useConnectorState = ({
         missing: [],
         unused: [],
         errors: [],
+        warnings: [],
       };
 
       const hasLabelError = !(connectorConfig.label || '').trim();
@@ -104,7 +110,8 @@ export const useConnectorState = ({
       const hasTemplateError =
         validation.missing.length > 0 || (validation.errors?.length ?? 0) > 0;
       const hasTemplateWarning =
-        !hasTemplateError && validation.unused.length > 0;
+        !hasTemplateError &&
+        (validation.unused.length > 0 || (validation.warnings?.length ?? 0) > 0);
 
       status[connectorConfig.id] = {
         hasWarning,

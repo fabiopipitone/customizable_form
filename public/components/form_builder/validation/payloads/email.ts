@@ -1,27 +1,6 @@
-import type { SupportedConnectorTypeId } from '../types';
+import type { ConnectorPayloadValidationResult } from './types';
 
-export const validateConnectorPayloadTemplate = ({
-  connectorTypeId,
-  template,
-}: {
-  connectorTypeId: SupportedConnectorTypeId | '' | null | undefined;
-  template: string;
-}): string[] => {
-  if (!connectorTypeId) {
-    return [];
-  }
-
-  const validator = CONNECTOR_PAYLOAD_VALIDATORS[connectorTypeId];
-  return validator ? validator(template) : [];
-};
-
-type ConnectorPayloadValidator = (template: string) => string[];
-
-const CONNECTOR_PAYLOAD_VALIDATORS: Partial<Record<SupportedConnectorTypeId, ConnectorPayloadValidator>> = {
-  '.email': validateEmailPayload,
-};
-
-function validateEmailPayload(template: string): string[] {
+export const validateEmailPayload = (template: string): ConnectorPayloadValidationResult => {
   const errors: string[] = [];
   let parsed: unknown;
 
@@ -31,12 +10,12 @@ function validateEmailPayload(template: string): string[] {
     errors.push(
       `Email payload template must be valid JSON: ${(error as Error)?.message ?? String(error)}`
     );
-    return errors;
+    return { errors, warnings: [] };
   }
 
   if (!isPlainObject(parsed)) {
     errors.push('Email payload template must be a JSON object.');
-    return errors;
+    return { errors, warnings: [] };
   }
 
   const {
@@ -139,8 +118,8 @@ function validateEmailPayload(template: string): string[] {
     }
   }
 
-  return errors;
-}
+  return { errors, warnings: [] };
+};
 
 function ensureStringArray(
   value: unknown,

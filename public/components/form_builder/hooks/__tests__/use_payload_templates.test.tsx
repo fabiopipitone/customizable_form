@@ -104,6 +104,7 @@ describe('usePayloadTemplates', () => {
         { key: 'extra', label: 'Extra' },
       ],
       errors: [],
+      warnings: [],
     });
   });
 
@@ -132,6 +133,65 @@ describe('usePayloadTemplates', () => {
     expect(result.current.templateValidationByConnector['email-1'].errors).toEqual([
       'Provide at least one recipient across "to", "cc", or "bcc".',
       'Field "message" is required and must be a non-empty string.',
+    ]);
+    expect(result.current.templateValidationByConnector['email-1'].warnings).toEqual([]);
+  });
+
+  it('validates jira templates and surfaces errors', () => {
+    const config = formConfig({
+      fields: [],
+      connectors: [
+        {
+          id: 'jira-1',
+          connectorTypeId: '.jira',
+          connectorId: 'jira',
+          label: 'Jira',
+          isLabelAuto: true,
+          documentTemplate: '{"subAction":"pushToService","subActionParams":{"incident":{}}}',
+        },
+      ],
+    });
+
+    const { result } = renderHook(() =>
+      usePayloadTemplates({
+        formConfig: config,
+        fieldValues: {},
+      })
+    );
+
+    expect(result.current.templateValidationByConnector['jira-1'].errors).toEqual([
+      'Incident "summary" is required and must be a non-empty string.',
+    ]);
+    expect(result.current.templateValidationByConnector['jira-1'].warnings).toEqual([]);
+  });
+
+  it('warns when Jira parent is provided', () => {
+    const config = formConfig({
+      fields: [],
+      connectors: [
+        {
+          id: 'jira-parent',
+          connectorTypeId: '.jira',
+          connectorId: 'jira',
+          label: 'Jira',
+          isLabelAuto: true,
+          documentTemplate:
+            '{"subAction":"pushToService","subActionParams":{"incident":{"summary":"s","issueType":"10005","priority":"2","parent":"ABC-1"}}}',
+        },
+      ],
+    });
+
+    const { result } = renderHook(() =>
+      usePayloadTemplates({
+        formConfig: config,
+        fieldValues: {},
+      })
+    );
+
+    expect(result.current.templateValidationByConnector['jira-parent'].warnings).toEqual([
+      'Ensure the provided issueType matches the Jira project (use the ID returned by the connector if required).',
+      'Ensure the provided priority matches the Jira project (use the ID returned by the connector if required).',
+      'Ensure the specified parent issue already exists in Jira; otherwise the connector execution may fail.',
     ]);
   });
 });

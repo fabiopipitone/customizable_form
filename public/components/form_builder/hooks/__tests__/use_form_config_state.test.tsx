@@ -4,7 +4,11 @@ import { useFormConfigState } from '../../use_form_config_state';
 import type { FormConfig, SupportedConnectorTypeId } from '../../types';
 import type { ActionType } from '@kbn/actions-types';
 import type { ActionConnector } from '@kbn/alerts-ui-shared/src/common/types';
-import { DEFAULT_EMAIL_PAYLOAD_TEMPLATE, DEFAULT_PAYLOAD_TEMPLATE } from '../../utils/form_helpers';
+import {
+  DEFAULT_EMAIL_PAYLOAD_TEMPLATE,
+  DEFAULT_JIRA_PAYLOAD_TEMPLATE,
+  DEFAULT_PAYLOAD_TEMPLATE,
+} from '../../utils/form_helpers';
 
 const initialConfig: FormConfig = {
   title: 'Form',
@@ -44,11 +48,17 @@ const actionConnector = (
     isSystemAction: false,
   } as ActionConnector & { actionTypeId: SupportedConnectorTypeId });
 
-const connectorTypes = [connectorType('.index'), connectorType('.webhook'), connectorType('.email')];
+const connectorTypes = [
+  connectorType('.index'),
+  connectorType('.webhook'),
+  connectorType('.email'),
+  connectorType('.jira'),
+];
 const connectors = [
   actionConnector('c1', '.index'),
   actionConnector('c2', '.webhook'),
   actionConnector('email-1', '.email'),
+  actionConnector('jira-1', '.jira'),
 ];
 
 describe('useFormConfigState', () => {
@@ -171,6 +181,43 @@ describe('useFormConfigState', () => {
     });
     expect(result.current.formConfig.connectors[0].documentTemplate).toBe(
       DEFAULT_EMAIL_PAYLOAD_TEMPLATE
+    );
+
+    act(() => {
+      result.current.handleConnectorTemplateChange('connector-1', '{"custom":true}');
+      result.current.handleConnectorTypeChange('connector-1', '.webhook', {
+        connectorTypes,
+        connectors,
+      });
+    });
+
+    expect(result.current.formConfig.connectors[0].documentTemplate).toBe('{"custom":true}');
+  });
+
+  it('applies jira default template when switching types if template is untouched', () => {
+    const configWithConnector: FormConfig = {
+      ...initialConfig,
+      connectors: [
+        {
+          id: 'connector-1',
+          connectorTypeId: '.index',
+          connectorId: 'c1',
+          label: 'Connector 1',
+          isLabelAuto: true,
+          documentTemplate: DEFAULT_PAYLOAD_TEMPLATE,
+        },
+      ],
+    };
+    const { result } = renderHook(() => useFormConfigState({ initialConfig: configWithConnector }));
+
+    act(() => {
+      result.current.handleConnectorTypeChange('connector-1', '.jira', {
+        connectorTypes,
+        connectors,
+      });
+    });
+    expect(result.current.formConfig.connectors[0].documentTemplate).toBe(
+      DEFAULT_JIRA_PAYLOAD_TEMPLATE
     );
 
     act(() => {

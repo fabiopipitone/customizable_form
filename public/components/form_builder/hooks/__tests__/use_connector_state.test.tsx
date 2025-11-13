@@ -83,8 +83,8 @@ describe('useConnectorState', () => {
         connectors,
         isLoadingConnectors: false,
         templateValidationByConnector: {
-          '1': { missing: [], unused: [], errors: [] },
-          '2': { missing: ['msg'], unused: [], errors: [] },
+          '1': { missing: [], unused: [], errors: [], warnings: [] },
+          '2': { missing: ['msg'], unused: [], errors: [], warnings: [] },
         },
       })
     );

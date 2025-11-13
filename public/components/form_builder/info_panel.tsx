@@ -45,8 +45,9 @@ export const InfoPanel: React.FC = () => {
 
   const activeValidation =
     activePayloadId !== null
-      ? templateValidationByConnector[activePayloadId] ?? { missing: [], unused: [], errors: [] }
-      : { missing: [], unused: [], errors: [] };
+      ? templateValidationByConnector[activePayloadId] ??
+        { missing: [], unused: [], errors: [], warnings: [] }
+      : { missing: [], unused: [], errors: [], warnings: [] };
 
   const activePayload = activePayloadId ? renderedPayloads[activePayloadId] ?? '' : '';
 
@@ -160,6 +161,19 @@ export const InfoPanel: React.FC = () => {
                     defaultMessage: 'Missing variables: {variables}.',
                     values: { variables: activeValidation.missing.join(', ') },
                   })}
+                </EuiText>
+              </>
+            ) : null}
+
+            {activeValidation.warnings.length > 0 ? (
+              <>
+                <EuiSpacer size="s" />
+                <EuiText color="warning" size="s">
+                  <ul style={{ paddingLeft: 18, margin: 0 }}>
+                    {activeValidation.warnings.map((warning, idx) => (
+                      <li key={`payload-warning-${idx}`}>{warning}</li>
+                    ))}
+                  </ul>
                 </EuiText>
               </>
             ) : null}
