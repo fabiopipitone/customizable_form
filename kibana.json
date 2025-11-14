@@ -1,7 +1,7 @@
 {
   "id": "customizableForm",
   "version": "0.8.0",
-  "kibanaVersion": "9.1.5",
+  "kibanaVersion": "kibana",
   "owner": {
     "name": "Fabio Pipitone",
     "githubTeam": ""
