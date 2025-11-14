@@ -11,6 +11,7 @@ import {
   EuiDualRange,
   EuiFieldText,
   EuiFormRow,
+  EuiIcon,
   EuiSelect,
   EuiSpacer,
   EuiSwitch,
@@ -40,6 +41,8 @@ const dragHandleStyles = css`
 
 const getDefaultSizeForDataType = (dataType: FormFieldConfig['dataType']) =>
   dataType === 'number' ? { ...DEFAULT_NUMBER_SIZE } : { ...DEFAULT_STRING_SIZE };
+
+const getFieldInputId = (fieldId: string, suffix: string) => `${fieldId}-${suffix}`;
 
 export const FieldsTab = () => {
   const {
@@ -97,6 +100,13 @@ export const FieldsTab = () => {
                     : [sizeBounds.min, sizeBounds.max];
                 const isBooleanType = field.dataType === 'boolean';
 
+                const labelInputId = getFieldInputId(field.id, 'label');
+                const keyInputId = getFieldInputId(field.id, 'key');
+                const placeholderInputId = getFieldInputId(field.id, 'placeholder');
+                const typeSelectId = getFieldInputId(field.id, 'type');
+                const dataTypeSelectId = getFieldInputId(field.id, 'dataType');
+                const sizeInputId = getFieldInputId(field.id, 'size');
+
                 return (
                   <EuiDraggable key={field.id} index={index} draggableId={field.id} customDragHandle>
                     {(draggableProvided, dragState) => (
@@ -113,16 +123,16 @@ export const FieldsTab = () => {
                           id={field.id}
                           buttonContent={
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                              <EuiButtonIcon
-                                iconType="grab"
-                                color="text"
+                              <span
                                 {...draggableProvided.dragHandleProps}
                                 css={dragHandleStyles}
                                 aria-label={i18n.translate('customizableForm.builder.reorderFieldAriaLabel', {
                                   defaultMessage: 'Reorder field {number}',
                                   values: { number: index + 1 },
                                 })}
-                              />
+                              >
+                                <EuiIcon type="grab" />
+                              </span>
                               <span>
                                 {field.label ||
                                   field.key ||
@@ -156,6 +166,7 @@ export const FieldsTab = () => {
                           <EuiSpacer size="s" />
 
                           <EuiFormRow
+                            id={labelInputId}
                             label={i18n.translate('customizableForm.builder.fieldLabelLabel', {
                               defaultMessage: 'Label',
                             })}
@@ -167,6 +178,7 @@ export const FieldsTab = () => {
                           </EuiFormRow>
 
                           <EuiFormRow
+                            id={keyInputId}
                             label={i18n.translate('customizableForm.builder.fieldKeyLabel', {
                               defaultMessage: 'Variable name',
                             })}
@@ -193,6 +205,7 @@ export const FieldsTab = () => {
                           </EuiFormRow>
 
                           <EuiFormRow
+                            id={placeholderInputId}
                             label={i18n.translate('customizableForm.builder.fieldPlaceholderLabel', {
                               defaultMessage: 'Placeholder',
                             })}
@@ -204,6 +217,7 @@ export const FieldsTab = () => {
                           </EuiFormRow>
 
                           <EuiFormRow
+                            id={typeSelectId}
                             label={i18n.translate('customizableForm.builder.fieldTypeLabel', {
                               defaultMessage: 'Input type',
                             })}
@@ -229,6 +243,7 @@ export const FieldsTab = () => {
                           </EuiFormRow>
 
                           <EuiFormRow
+                            id={dataTypeSelectId}
                             label={i18n.translate('customizableForm.builder.fieldDataTypeLabel', {
                               defaultMessage: 'Field data type',
                             })}
@@ -263,6 +278,7 @@ export const FieldsTab = () => {
 
                           {!isBooleanType ? (
                             <EuiFormRow
+                              id={sizeInputId}
                               label={i18n.translate('customizableForm.builder.fieldSizeLabel', {
                                 defaultMessage: 'Size constraint',
                               })}
@@ -273,6 +289,7 @@ export const FieldsTab = () => {
                                   type: field.dataType === 'number' ? 'numeric' : 'character',
                                 },
                               })}
+                              labelType="legend"
                             >
                               <EuiDualRange
                                 min={sizeBounds.min}
