@@ -220,4 +220,30 @@ describe('usePayloadTemplates', () => {
       'Field "message" is required and must be a non-empty string.',
     ]);
   });
+
+  it('flags non-JSON templates as errors regardless of connector type', () => {
+    const config = formConfig({
+      connectors: [
+        {
+          id: 'conn-json',
+          connectorTypeId: '.index',
+          connectorId: 'idx',
+          label: 'Idx',
+          isLabelAuto: true,
+          documentTemplate: '{ "foo": "bar" "missingComma": true }',
+        },
+      ],
+    });
+
+    const { result } = renderHook(() =>
+      usePayloadTemplates({
+        formConfig: config,
+        fieldValues: {},
+      })
+    );
+
+    const errors = result.current.templateValidationByConnector['conn-json'].errors;
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/Payload template must be a valid JSON/i);
+  });
 });

@@ -1,6 +1,6 @@
 {
   "id": "customizableForm",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "kibanaVersion": "kibana",
   "owner": {
     "name": "Fabio Pipitone",
