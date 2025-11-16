@@ -77,10 +77,19 @@ export const usePayloadTemplates = ({ formConfig, fieldValues }: UsePayloadTempl
         })
         .filter((field): field is { key: string; label: string } => field !== null);
 
-      const { errors, warnings } = validateConnectorPayloadTemplate({
-        connectorTypeId: connectorConfig.connectorTypeId as SupportedConnectorTypeId | '' | null,
-        template: connectorConfig.documentTemplate,
-      });
+      let jsonError: string | null = null;
+      try {
+        JSON.parse(connectorConfig.documentTemplate);
+      } catch (error) {
+        jsonError = `Payload template must be a valid JSON: ${(error as Error)?.message ?? String(error)}`;
+      }
+
+      const { errors, warnings } = jsonError
+        ? { errors: [jsonError], warnings: [] }
+        : validateConnectorPayloadTemplate({
+            connectorTypeId: connectorConfig.connectorTypeId as SupportedConnectorTypeId | '' | null,
+            template: connectorConfig.documentTemplate,
+          });
 
       acc[connectorConfig.id] = {
         missing,
