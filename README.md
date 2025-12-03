@@ -1,60 +1,98 @@
 # Customizable Form Plugin
 
-Customizable Form is a Kibana plugin that delivers “form-based” visualizations to collect user input and trigger Kibana Action connectors. It ships with:
-
-- **Form Builder** with live preview, info/summary panel, and configuration tabs (general, fields, connectors, payloads).
-- **Embeddable** panel for dashboards/library items that reuses saved configuration and executes the configured connectors.
-- **Refactor-friendly architecture** built on composable hooks, shared context, and reusable services (`public/services`, `common`).
-
-This document explains the architecture, development workflow, functional usage, and supporting references.
+Customizable Form is a Kibana plugin that delivers “form-based” visualizations to collect user input and trigger Kibana Action connectors directly from inside a dashboard.
 
 ---
 
-## 1. Overview & Architecture
+## Features
+- Customization the form composition in terms of number of columns, title, description
+- Choice of any Kibana Connector you have previously created (as for now only the Index, Webhook, Email, Jira and MS Teams are supported), even more than one that must be triggered at the same time (e.g. the same submission must open a Jira ticket and send an email)
+- Personalization all the fields in terms of:
+  - order in the form
+  - label 
+  - variable name (to be used in the payload template)
+  - placeholder
+  - input type (single or multiline)
+  - data type (string, number or boolean)
+  - min/max size (characters for strings or lower/upper bounds for number)
+  - mandatoriness of a field (optional or required)
+- Personalization the payload templates that will be used by the connector (some connectors require specific template)
+- Fields and parameters checks, inhibiting the visualization saving, in order to prevent any possible mistake
+- Real time preview in edit mode
+- Submission timestamp usable in payload templates via the `__submission_timestamp__` variable
+- Optional confirmation modal before submission
 
-### 1.1 High-level summary
-- Supports Kibana `9.1.5` and requires core plugins such as `embeddable`, `visualizations`, `presentationUtil`, `triggersActionsUi`, etc.
-- Goal: create, save, and reuse interactive forms that route submissions to multiple connector types (`.index`, `.webhook`, `.email`, `.jira`, `.teams`).
-- For connectors that require structured parameters (email/Jira/Teams), the payload template must render a JSON object matching the connector `params` schema.
-- Key capabilities: variable validation, per-connector payload templates, optional confirmation modal before executing connectors.
+---
 
-### 1.2 Architecture map
-| Area | Path | Notes |
-|------|------|-------|
-| **UI Builder** | `public/components/form_builder` | Three-column layout plus dedicated configuration tabs. |
-| **Hooks** | `public/components/form_builder/hooks` | `use_form_builder_lifecycle` composes state; derived hooks cover validation, payloads, connector state, execution. |
-| **Context** | `form_builder_context.tsx` | `FormBuilderProvider` shares `formConfig`, derived state, and mutation handlers down the tree. |
-| **Utils** | `public/components/form_builder/utils` | Serialization, payload helpers, connector summary builders, common constants. |
-| **Services** | `public/services/*` | Persistence, library client, embeddable state transfer, core service access. |
-| **Embeddable** | `public/embeddable` | `customizable_form_embeddable.tsx` renders preview in dashboards and runs connectors. |
-| **Server** | `server/*` | Plugin registration, saved object definition, manifest. |
-| **Common** | `common/*` | Shared types and content-management helpers. |
+## Demo
+<TBD>
 
-```
-+-------------------+        +-----------------------+        +----------------------+
-| Form Builder UI   | -----> | Form Builder Hooks    | -----> | Services (persistence|
-| (preview/info/tabs)|       | (state, validation,   |        | connectors, library) |
-+-------------------+        | payload, execution)   |        +----------------------+
-          |                           |                                  |
-          v                           v                                  v
-   FormBuilderContext --------> Derived State -----------> Embeddable (dashboards)
-```
+---
 
-### 1.3 Builder lifecycle
-1. **`CustomizableFormBuilder`** seeds default config + saved-object attributes and invokes `useFormBuilderLifecycle`.
-2. **`useFormBuilderLifecycle`**
-   - Fetches connector types/list via `useConnectorsData`.
-   - Owns CRUD over `formConfig` and field values via `useFormConfigState`.
-   - Derives validation (`useFieldValidation`), payload previews (`usePayloadTemplates`), and connector summaries (`useConnectorState`).
-   - Coordinates save flows (persistence services) and submits/test executions (`useConnectorExecution`).
-3. **`FormBuilderLayout`** receives pure props and renders the three main panels: `PreviewCard`, `InfoPanel`, `ConfigurationPanel`.
-4. **Context** ensures every nested component uses `useFormBuilderContext` instead of prop drilling.
+## Getting Started
 
-### 1.4 Embeddable flow
-1. `customizable_form_embeddable.tsx` receives `CustomizableFormEmbeddableSerializedState`.
-2. Resolves the saved object through `resolveCustomizableForm` (persistence service).
-3. Uses `usePayloadTemplates` to render payloads from stored template + current field values.
-4. Reuses `useConnectorExecution` for shared submit logic and optional confirmation modal.
+### Install on Kibana
+
+Every release package includes a Plugin version (X.Y.Z) and a Kibana version (A.B.C).
+
+- Go to [releases](https://github.com/fabiopipitone/customizable_form/releases) and choose the right one for your Kibana version
+- launch a shell terminal and go to $KIBANA_HOME folder
+- use Kibana CLI to install :
+  - directly from Internet URL :
+`./bin/kibana-plugin install https://github.com/fabiopipitone/customizable_form/releases/download/vX.Y.Z/customizableForm-X.Y.Z-kibana-A.B.C.zip`
+  - locally after manual download :
+`./bin/kibana-plugin install file:///path/to/customizableForm-X.Y.Z_A.B.C.zip`
+- restart Kibana
+
+---
+
+## Structured connector payloads
+
+Some connectors require a specific JSON structure. The builder enforces the most common subset of rules so users catch mistakes before hitting the connector API.
+
+- **Email (`.email`)** — the template must render:
+
+  ```json
+  {
+    "to": ["<target email address>"],
+    "subject": "<email subject>",
+    "message": "<email message>"
+  }
+  ```
+
+  Optional fields such as `cc`, `bcc`, `messageHTML`, and `attachments` are supported, but the validator requires at least one recipient plus subject/message strings.
+
+- **Jira (`.jira`)** — the template must render a `pushToService` payload:
+
+  ```json
+  {
+    "subAction": "pushToService",
+    "subActionParams": {
+      "incident": {
+        "summary": "<issue summary>",
+        "description": "<issue description>",
+        "issueType": "Task",
+        "priority": "Medium"
+      }
+    }
+  }
+  ```
+
+  You may add `issueType`, `priority`, `parent`, `labels`, or `comments` manually, but copy the exact values/IDs from the Jira connector test panel (or your Jira project) to avoid downstream failures. Additional fields are intentionally blocked.
+
+- **Microsoft Teams (`.teams`)** — payloads must include the `message` field:
+
+  ```json
+  {
+    "message": "{{message}}"
+  }
+  ```
+
+  Optional fields are not supported; any extra keys will trigger an error in the builder.
+
+- **Submission timestamp** — regardless of connector type, you can inject the ISO timestamp of the submission via `{{__submission_timestamp__}}`. The actual value is filled when the user clicks Submit.
+
+Invalid structures surface directly in the Payload tab and block both Save and Submit.
 
 ---
 
@@ -170,12 +208,4 @@ Invalid structures surface directly in the Payload tab and block both Save and S
 | `public/components/form_builder/__tests__/serialization.test.ts` | Layout/size normalization + round-trip serialization. |
 | `public/components/form_builder/__tests__/validation.test.ts` | `validateVariableName` rules. |
 | `public/embeddable/__tests__/customizable_form_embeddable.test.tsx` | Embeddable load/error/success + confirmation logic. |
-
-### B. Services & API reference
-- `public/services/persistence.ts` — `createCustomizableForm`, `updateCustomizableForm`, `resolveCustomizableForm`, `getDocumentFromResolveResponse`.
-- `public/services/library_client.ts` — helper around Content Management CRUD operations.
-- `public/services/embeddable_state_transfer.ts` — transfers state between apps/dashboards.
-- `public/services/core_services.ts` — centralized accessors for Kibana core services (toasts, overlays, application navigation).
-- `public/components/form_builder/use_connectors_data.ts` — encapsulated HTTP fetch for connector types/list with toast reporting (see examples in §2.5).
-
 ---
