@@ -25,7 +25,7 @@ Customizable Form is a Kibana plugin that delivers “form-based” visualizatio
 ---
 
 ## Demo
-<TBD>
+![Demo](docs/customizable_form_demo.gif)
 
 ---
 
@@ -96,96 +96,68 @@ Invalid structures surface directly in the Payload tab and block both Save and S
 
 ---
 
-## 2. Development & Contribution
+## Development & Contribution
 
-### 2.1 Environment requirements
-- Kibana repo with the plugin located at `kibana/plugins/customizable_form`.
-- Node/Yarn versions aligned with the Kibana branch (use `nvm use` before running scripts).
-- `BROWSERSLIST_IGNORE_OLD_DATA=1` recommended during builds for faster output.
+### Environment requirements
+- [nvm](https://github.com/nvm-sh/nvm), not strictly needed but highly recommended to handle Node.js versions
+- [docker](https://docs.docker.com/engine/install/), needed to start a testing ES environment via scripts/es-switch.sh script
+- [yarn](https://classic.yarnpkg.com/lang/en/docs/install/#windows-stable)
+- PATIENCE, almost mandatory when it comes to kbn bootstrap and kbn/optimizer steps
 
-### 2.2 Quick setup
+### Quick setup
 ```bash
-yarn kbn bootstrap        # install dependencies for Kibana + plugin
-yarn plugin-helpers dev   # build UI assets in watch mode
-yarn plugin-helpers build # produce distributable artifact
-```
-Run tests with `node ../../scripts/jest --runTestsByPath <path-to-test>` after activating the proper Node version.
-
-### 2.3 Directory layout (excerpt)
-```
-public/
-  components/form_builder/
-    form_builder.tsx            # builder entry point
-    form_builder_layout.tsx     # 3-column layout
-    configuration_tabs/         # general, fields, connectors, payload tabs
-    hooks/                      # lifecycle + derived state hooks
-    utils/                      # shared helpers (shared.ts, form_helpers.ts, serialization.ts)
-  embeddable/
-    customizable_form_embeddable.tsx
-services/
-  persistence.ts, library_client.ts, core_services.ts, embeddable_state_transfer.ts
-server/
-  plugin.ts (registration boilerplate)
-common/
-  types.ts, content_management/
+git clone https://github.com/elastic/kibana.git
+git checkout tags/vA.B.C # with A.B.C the kibana version
+nvm use
+yarn kbn bootstrap
 ```
 
-### 2.4 Contribution guidelines
-- **Incremental refactors**: keep each step self-contained (e.g., context extraction, hook split, shared handler map).
-- **Testing**: every new hook/component needs a focused Jest test; rely on smoke tests for builder/embeddable flows.
-- **Context first**: avoid deep prop chains—consume store via `FormBuilderProvider`.
-- **Service boundaries**: any network/persistence interaction lives in `public/services` to keep components testable.
-- **Manual QA notes**: describe console/dashboard scenarios when code touches user flows.
+Then, launch an Elasticsearch node with docker using the bash script in `scripts/es-switch.sh A.B.C`. 
+This script stops any `es-*` container already running, pulls the Elasticsearch docker image of the needed version (if not among the images already) and run/start the container with that image. Then create the user `kibana_dev` with password `kibana_dev_pwd` one can use when developing the plugin.
+If the script is launched with `--trial` it also starts the 30-day trial license on Elasticsearch.
 
----
+To check everythin works properly (without the plugin) move to the `kibana` root directory, add the following lines in the `config/kibana.yml` file:
 
-## 3. Structured connector payloads
+```yml
+elasticsearch.username: kibana_dev
+elasticsearch.password: kibana_dev_pwd
+```
 
-Some connectors require a specific JSON structure. The builder enforces the most common subset of rules so users catch mistakes before hitting the connector API.
+Then, in the terminal, launch kibana with
 
-- **Email (`.email`)** — the template must render:
+```bash
+yarn start
+```
 
-  ```json
-  {
-    "to": ["<target email address>"],
-    "subject": "<email subject>",
-    "message": "<email message>"
-  }
-  ```
+Wait for it to start (if it's the first time it'll take a while because of the `@kbn/optimizer`). 
+Then open your browser at `http://localhost:5601`, login with credentials `elastic,elastic_pwd` and check everything works as expected.
 
-  Optional fields such as `cc`, `bcc`, `messageHTML`, and `attachments` are supported, but the validator requires at least one recipient plus subject/message strings.
+If so, proceed adding the plugin. 
+Stop kibana and, from the kibana root folder, go with:
 
-- **Jira (`.jira`)** — the template must render a `pushToService` payload:
+```bash
+cd plugins
+git clone https://github.com/fabiopipitone/customizable_form.git
+yarn dev --watch
+```
 
-  ```json
-  {
-    "subAction": "pushToService",
-    "subActionParams": {
-      "incident": {
-        "summary": "<issue summary>",
-        "description": "<issue description>",
-        "issueType": "Task",
-        "priority": "Medium"
-      }
-    }
-  }
-  ```
+Leave both the kibana console (with `yarn start`) and the plugin console (`yarn dev --watch`) running while developing.
 
-  You may add `issueType`, `priority`, `parent`, `labels`, or `comments` manually, but copy the exact values/IDs from the Jira connector test panel (or your Jira project) to avoid downstream failures. Additional fields are intentionally blocked.
+### Testing and building
 
-- **Microsoft Teams (`.teams`)** — payloads must include the `message` field:
+When done developing, from inside `plugins/customizable_form`, run the tests (and enrich them if new features are added) with 
 
-  ```json
-  {
-    "message": "{{message}}"
-  }
-  ```
+```bash
+node ../../scripts/jest
+```
 
-  Optional fields are not supported; any extra keys will trigger an error in the builder.
+When done, to build the plugin you can use the `scripts/build_for_kbn.sh` script, like this:
 
-- **Submission timestamp** — regardless of connector type, you can inject the ISO timestamp of the submission via `{{__submission_timestamp__}}`. The actual value is filled when the user clicks Submit.
+```bash
+scripts/build_for_kbn.sh A.B.C # with A.B.C the kibana version to build the plugin for
+```
 
-Invalid structures surface directly in the Payload tab and block both Save and Submit.
+The zip file will be created inside the `dist` folder.
 
 ---
 
