@@ -181,3 +181,9 @@ The zip file will be created inside the `dist` folder.
 | `public/components/form_builder/__tests__/validation.test.ts` | `validateVariableName` rules. |
 | `public/embeddable/__tests__/customizable_form_embeddable.test.tsx` | Embeddable load/error/success + confirmation logic. |
 ---
+
+## Donation
+
+If you like the project and want to support me, any amount will be highly appreciated!
+
+[![paypal](https://www.paypalobjects.com/en_US/i/btn/btn_donate_LG.gif)](https://www.paypal.com/donate/?hosted_button_id=QZ9G77DVB9XWN)
