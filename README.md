@@ -5,9 +5,9 @@ Customizable Form is a Kibana plugin that delivers “form-based” visualizatio
 ---
 
 ## Features
-- Customization the form composition in terms of number of columns, title, description
+- Customization of the form composition in terms of number of columns, title, description
 - Choice of any Kibana Connector you have previously created (as for now only the Index, Webhook, Email, Jira and MS Teams are supported), even more than one that must be triggered at the same time (e.g. the same submission must open a Jira ticket and send an email)
-- Personalization all the fields in terms of:
+- Personalization of all the fields in terms of:
   - order in the form
   - label 
   - variable name (to be used in the payload template)
@@ -16,7 +16,7 @@ Customizable Form is a Kibana plugin that delivers “form-based” visualizatio
   - data type (string, number or boolean)
   - min/max size (characters for strings or lower/upper bounds for number)
   - mandatoriness of a field (optional or required)
-- Personalization the payload templates that will be used by the connector (some connectors require specific template)
+- Personalization of the payload templates that will be used by the connector (some connectors require specific template)
 - Fields and parameters checks, inhibiting the visualization saving, in order to prevent any possible mistake
 - Real time preview in edit mode
 - Submission timestamp usable in payload templates via the `__submission_timestamp__` variable
