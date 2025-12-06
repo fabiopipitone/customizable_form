@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./docs/customizable_form_cover.png" alt="cover" width="100%">
+</p>
+
 # Customizable Form Plugin
 
 Customizable Form is a Kibana plugin that delivers “form-based” visualizations to collect user input and trigger Kibana Action connectors directly from inside a dashboard.
