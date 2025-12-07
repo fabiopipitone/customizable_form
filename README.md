@@ -1,107 +1,56 @@
-# Customizable Form Plugin
+<p align="center">
+  <img src="./docs/customizable_form_cover.png" alt="cover" width="100%">
+</p>
 
-Customizable Form is a Kibana plugin that delivers “form-based” visualizations to collect user input and trigger Kibana Action connectors. It ships with:
+# Customizable Form
 
-- **Form Builder** with live preview, info/summary panel, and configuration tabs (general, fields, connectors, payloads).
-- **Embeddable** panel for dashboards/library items that reuses saved configuration and executes the configured connectors.
-- **Refactor-friendly architecture** built on composable hooks, shared context, and reusable services (`public/services`, `common`).
-
-This document explains the architecture, development workflow, functional usage, and supporting references.
+Customizable Form is a Kibana plugin that delivers “form-based” visualizations to collect user input and trigger Kibana Action connectors directly from inside a dashboard.
 
 ---
 
-## 1. Overview & Architecture
-
-### 1.1 High-level summary
-- Supports Kibana `9.1.5` and requires core plugins such as `embeddable`, `visualizations`, `presentationUtil`, `triggersActionsUi`, etc.
-- Goal: create, save, and reuse interactive forms that route submissions to multiple connector types (`.index`, `.webhook`, `.email`, `.jira`, `.teams`).
-- For connectors that require structured parameters (email/Jira/Teams), the payload template must render a JSON object matching the connector `params` schema.
-- Key capabilities: variable validation, per-connector payload templates, optional confirmation modal before executing connectors.
-
-### 1.2 Architecture map
-| Area | Path | Notes |
-|------|------|-------|
-| **UI Builder** | `public/components/form_builder` | Three-column layout plus dedicated configuration tabs. |
-| **Hooks** | `public/components/form_builder/hooks` | `use_form_builder_lifecycle` composes state; derived hooks cover validation, payloads, connector state, execution. |
-| **Context** | `form_builder_context.tsx` | `FormBuilderProvider` shares `formConfig`, derived state, and mutation handlers down the tree. |
-| **Utils** | `public/components/form_builder/utils` | Serialization, payload helpers, connector summary builders, common constants. |
-| **Services** | `public/services/*` | Persistence, library client, embeddable state transfer, core service access. |
-| **Embeddable** | `public/embeddable` | `customizable_form_embeddable.tsx` renders preview in dashboards and runs connectors. |
-| **Server** | `server/*` | Plugin registration, saved object definition, manifest. |
-| **Common** | `common/*` | Shared types and content-management helpers. |
-
-```
-+-------------------+        +-----------------------+        +----------------------+
-| Form Builder UI   | -----> | Form Builder Hooks    | -----> | Services (persistence|
-| (preview/info/tabs)|       | (state, validation,   |        | connectors, library) |
-+-------------------+        | payload, execution)   |        +----------------------+
-          |                           |                                  |
-          v                           v                                  v
-   FormBuilderContext --------> Derived State -----------> Embeddable (dashboards)
-```
-
-### 1.3 Builder lifecycle
-1. **`CustomizableFormBuilder`** seeds default config + saved-object attributes and invokes `useFormBuilderLifecycle`.
-2. **`useFormBuilderLifecycle`**
-   - Fetches connector types/list via `useConnectorsData`.
-   - Owns CRUD over `formConfig` and field values via `useFormConfigState`.
-   - Derives validation (`useFieldValidation`), payload previews (`usePayloadTemplates`), and connector summaries (`useConnectorState`).
-   - Coordinates save flows (persistence services) and submits/test executions (`useConnectorExecution`).
-3. **`FormBuilderLayout`** receives pure props and renders the three main panels: `PreviewCard`, `InfoPanel`, `ConfigurationPanel`.
-4. **Context** ensures every nested component uses `useFormBuilderContext` instead of prop drilling.
-
-### 1.4 Embeddable flow
-1. `customizable_form_embeddable.tsx` receives `CustomizableFormEmbeddableSerializedState`.
-2. Resolves the saved object through `resolveCustomizableForm` (persistence service).
-3. Uses `usePayloadTemplates` to render payloads from stored template + current field values.
-4. Reuses `useConnectorExecution` for shared submit logic and optional confirmation modal.
+## Features
+- Customization of the form composition in terms of number of columns, title, description
+- Choice of any Kibana Connector you have previously created (as for now only the Index, Webhook, Email, Jira and MS Teams are supported), even more than one that must be triggered at the same time (e.g. the same submission must open a Jira ticket and send an email)
+- Personalization of all the fields in terms of:
+  - order in the form
+  - label 
+  - variable name (to be used in the payload template)
+  - placeholder
+  - input type (single or multiline)
+  - data type (string, number or boolean)
+  - min/max size (characters for strings or lower/upper bounds for number)
+  - mandatoriness of a field (optional or required)
+- Personalization of the payload templates that will be used by the connector (some connectors require specific template)
+- Fields and parameters checks, inhibiting the visualization saving, in order to prevent any possible mistake
+- Real time preview in edit mode
+- Submission timestamp usable in payload templates via the `__submission_timestamp__` variable
+- Optional confirmation modal before submission
 
 ---
 
-## 2. Development & Contribution
-
-### 2.1 Environment requirements
-- Kibana repo with the plugin located at `kibana/plugins/customizable_form`.
-- Node/Yarn versions aligned with the Kibana branch (use `nvm use` before running scripts).
-- `BROWSERSLIST_IGNORE_OLD_DATA=1` recommended during builds for faster output.
-
-### 2.2 Quick setup
-```bash
-yarn kbn bootstrap        # install dependencies for Kibana + plugin
-yarn plugin-helpers dev   # build UI assets in watch mode
-yarn plugin-helpers build # produce distributable artifact
-```
-Run tests with `node ../../scripts/jest --runTestsByPath <path-to-test>` after activating the proper Node version.
-
-### 2.3 Directory layout (excerpt)
-```
-public/
-  components/form_builder/
-    form_builder.tsx            # builder entry point
-    form_builder_layout.tsx     # 3-column layout
-    configuration_tabs/         # general, fields, connectors, payload tabs
-    hooks/                      # lifecycle + derived state hooks
-    utils/                      # shared helpers (shared.ts, form_helpers.ts, serialization.ts)
-  embeddable/
-    customizable_form_embeddable.tsx
-services/
-  persistence.ts, library_client.ts, core_services.ts, embeddable_state_transfer.ts
-server/
-  plugin.ts (registration boilerplate)
-common/
-  types.ts, content_management/
-```
-
-### 2.4 Contribution guidelines
-- **Incremental refactors**: keep each step self-contained (e.g., context extraction, hook split, shared handler map).
-- **Testing**: every new hook/component needs a focused Jest test; rely on smoke tests for builder/embeddable flows.
-- **Context first**: avoid deep prop chains—consume store via `FormBuilderProvider`.
-- **Service boundaries**: any network/persistence interaction lives in `public/services` to keep components testable.
-- **Manual QA notes**: describe console/dashboard scenarios when code touches user flows.
+## Demo
+![Demo](docs/customizable_form_demo.gif)
 
 ---
 
-## 3. Structured connector payloads
+## Getting Started
+
+### Install on Kibana
+
+Every release package includes a Plugin version (X.Y.Z) and a Kibana version (A.B.C).
+
+- Go to [releases](https://github.com/fabiopipitone/customizable_form/releases) and choose the right one for your Kibana version
+- launch a shell terminal and go to $KIBANA_HOME folder
+- use Kibana CLI to install :
+  - directly from Internet URL :
+`./bin/kibana-plugin install https://github.com/fabiopipitone/customizable_form/releases/download/vX.Y.Z/customizableForm-X.Y.Z-kibana-A.B.C.zip`
+  - locally after manual download :
+`./bin/kibana-plugin install file:///path/to/customizableForm-X.Y.Z_A.B.C.zip`
+- restart Kibana
+
+---
+
+## Structured connector payloads
 
 Some connectors require a specific JSON structure. The builder enforces the most common subset of rules so users catch mistakes before hitting the connector API.
 
@@ -151,6 +100,71 @@ Invalid structures surface directly in the Payload tab and block both Save and S
 
 ---
 
+## Development & Contribution
+
+### Environment requirements
+- [nvm](https://github.com/nvm-sh/nvm), not strictly needed but highly recommended to handle Node.js versions
+- [docker](https://docs.docker.com/engine/install/), needed to start a testing ES environment via scripts/es-switch.sh script
+- [yarn](https://classic.yarnpkg.com/lang/en/docs/install/#windows-stable)
+- PATIENCE, almost mandatory when it comes to kbn bootstrap and kbn/optimizer steps
+
+### Quick setup
+```bash
+git clone https://github.com/elastic/kibana.git
+git checkout tags/vA.B.C # with A.B.C the kibana version
+nvm use
+yarn kbn bootstrap
+```
+
+Then, launch an Elasticsearch node with docker using the bash script in `scripts/es-switch.sh A.B.C`. 
+This script stops any `es-*` container already running, pulls the Elasticsearch docker image of the needed version (if not among the images already) and run/start the container with that image. Then create the user `kibana_dev` with password `kibana_dev_pwd` one can use when developing the plugin.
+If the script is launched with `--trial` it also starts the 30-day trial license on Elasticsearch.
+
+To check everythin works properly (without the plugin) move to the `kibana` root directory, add the following lines in the `config/kibana.yml` file:
+
+```yml
+elasticsearch.username: kibana_dev
+elasticsearch.password: kibana_dev_pwd
+```
+
+Then, in the terminal, launch kibana with
+
+```bash
+yarn start
+```
+
+Wait for it to start (if it's the first time it'll take a while because of the `@kbn/optimizer`). 
+Then open your browser at `http://localhost:5601`, login with credentials `elastic,elastic_pwd` and check everything works as expected.
+
+If so, proceed adding the plugin. 
+Stop kibana and, from the kibana root folder, go with:
+
+```bash
+cd plugins
+git clone https://github.com/fabiopipitone/customizable_form.git
+yarn dev --watch
+```
+
+Leave both the kibana console (with `yarn start`) and the plugin console (`yarn dev --watch`) running while developing.
+
+### Testing and building
+
+When done developing, from inside `plugins/customizable_form`, run the tests (and enrich them if new features are added) with 
+
+```bash
+node ../../scripts/jest
+```
+
+When done, to build the plugin you can use the `scripts/build_for_kbn.sh` script, like this:
+
+```bash
+scripts/build_for_kbn.sh A.B.C # with A.B.C the kibana version to build the plugin for
+```
+
+The zip file will be created inside the `dist` folder.
+
+---
+
 ## Appendices
 
 ### A. Testing matrix (excerpt)
@@ -170,12 +184,10 @@ Invalid structures surface directly in the Payload tab and block both Save and S
 | `public/components/form_builder/__tests__/serialization.test.ts` | Layout/size normalization + round-trip serialization. |
 | `public/components/form_builder/__tests__/validation.test.ts` | `validateVariableName` rules. |
 | `public/embeddable/__tests__/customizable_form_embeddable.test.tsx` | Embeddable load/error/success + confirmation logic. |
-
-### B. Services & API reference
-- `public/services/persistence.ts` — `createCustomizableForm`, `updateCustomizableForm`, `resolveCustomizableForm`, `getDocumentFromResolveResponse`.
-- `public/services/library_client.ts` — helper around Content Management CRUD operations.
-- `public/services/embeddable_state_transfer.ts` — transfers state between apps/dashboards.
-- `public/services/core_services.ts` — centralized accessors for Kibana core services (toasts, overlays, application navigation).
-- `public/components/form_builder/use_connectors_data.ts` — encapsulated HTTP fetch for connector types/list with toast reporting (see examples in §2.5).
-
 ---
+
+## Donation
+
+If you like the project and want to support me, any amount will be highly appreciated!
+
+[![paypal](https://www.paypalobjects.com/en_US/i/btn/btn_donate_LG.gif)](https://www.paypal.com/donate/?hosted_button_id=QZ9G77DVB9XWN)
