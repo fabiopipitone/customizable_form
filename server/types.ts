@@ -5,6 +5,7 @@ export interface CustomizableFormPluginSetup {}
 export interface CustomizableFormPluginStart {}
 
 export interface CustomizableFormPluginSetupDependencies {
+  features: import('@kbn/features-plugin/server').FeaturesPluginSetup;
   embeddable: import('@kbn/embeddable-plugin/server').EmbeddableSetup;
   contentManagement: import('@kbn/content-management-plugin/server').ContentManagementServerSetup;
 }
