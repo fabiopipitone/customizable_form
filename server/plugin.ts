@@ -1,9 +1,10 @@
-import type {
-  PluginInitializerContext,
-  CoreSetup,
-  CoreStart,
-  Plugin,
-  Logger,
+import {
+  DEFAULT_APP_CATEGORIES,
+  type PluginInitializerContext,
+  type CoreSetup,
+  type CoreStart,
+  type Plugin,
+  type Logger,
 } from '@kbn/core/server';
 
 import type {
@@ -18,7 +19,12 @@ import {
   CUSTOMIZABLE_FORM_CONTENT_REGISTRATION,
   CustomizableFormStorage,
 } from './content_management/storage';
-import { CUSTOMIZABLE_FORM_EMBEDDABLE_TYPE } from '../common';
+import {
+  CUSTOMIZABLE_FORM_EMBEDDABLE_TYPE,
+  CUSTOMIZABLE_FORM_SAVED_OBJECT_TYPE,
+  PLUGIN_ID,
+  PLUGIN_NAME,
+} from '../common';
 
 export class CustomizableFormPlugin
   implements
@@ -39,7 +45,7 @@ export class CustomizableFormPlugin
 
   public setup(
     core: CoreSetup,
-    { contentManagement, embeddable }: CustomizableFormPluginSetupDependencies
+    { contentManagement, embeddable, features }: CustomizableFormPluginSetupDependencies
   ) {
     this.logger.debug('customizableForm: Setup');
 
@@ -49,6 +55,25 @@ export class CustomizableFormPlugin
         save: true,
       },
     }));
+
+    features.registerKibanaFeature({
+      id: PLUGIN_ID,
+      name: PLUGIN_NAME,
+      category: DEFAULT_APP_CATEGORIES.kibana,
+      app: [PLUGIN_ID, 'dashboard'],
+      privileges: {
+        all: {
+          app: [PLUGIN_ID, 'dashboard'],
+          savedObject: { all: [CUSTOMIZABLE_FORM_SAVED_OBJECT_TYPE], read: [] },
+          ui: ['read', 'write'],
+        },
+        read: {
+          app: [PLUGIN_ID, 'dashboard'],
+          savedObject: { all: [], read: [CUSTOMIZABLE_FORM_SAVED_OBJECT_TYPE] },
+          ui: ['read'],
+        },
+      },
+    });
 
     registerCustomizableFormSavedObjectType(core.savedObjects);
 
