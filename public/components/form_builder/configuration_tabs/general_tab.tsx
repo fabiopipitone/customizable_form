@@ -120,7 +120,25 @@ export const GeneralTab = () => {
           onChange={(event) => updateConfig({ requireConfirmationOnSubmit: event.target.checked })}
         />
       </EuiFormRow>
+
+      <EuiFormRow
+        label={i18n.translate('customizableForm.builder.allowRowPickerLabel', {
+          defaultMessage: 'Allow row picker',
+        })}
+        display="columnCompressed"
+        hasChildLabel={false}
+        helpText={i18n.translate('customizableForm.builder.allowRowPickerHelp', {
+          defaultMessage: 'Enable pre-filling form fields by picking a row from a Lens data table.',
+        })}
+      >
+        <EuiSwitch
+          label={i18n.translate('customizableForm.builder.allowRowPickerSwitch', {
+            defaultMessage: 'Enable row picker',
+          })}
+          checked={formConfig.allowRowPicker === true}
+          onChange={(event) => updateConfig({ allowRowPicker: event.target.checked })}
+        />
+      </EuiFormRow>
     </EuiForm>
   );
 };
-

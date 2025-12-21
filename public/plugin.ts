@@ -24,6 +24,7 @@ import {
 } from '../common/content_management';
 import { customizableFormVisTypeAlias } from './vis_type_alias';
 import { setEmbeddableStateTransfer } from './services/embeddable_state_transfer';
+import { initializeRowPicker } from './services/row_picker';
 
 export class CustomizableFormPlugin
   implements Plugin<CustomizableFormPluginSetup, CustomizableFormPluginStart>
@@ -59,8 +60,13 @@ export class CustomizableFormPlugin
       CUSTOMIZABLE_FORM_EMBEDDABLE_TYPE,
       async () => {
         const { getCustomizableFormEmbeddableFactory } = await import('./embeddable');
-        const [coreStart] = await startServicesPromise;
-        return getCustomizableFormEmbeddableFactory({ coreStart });
+        const [coreStart, depsStart] = await startServicesPromise;
+        return getCustomizableFormEmbeddableFactory({
+          coreStart,
+          pluginsStart: {
+            uiActions: depsStart.uiActions,
+          },
+        });
       }
     );
 
@@ -96,8 +102,12 @@ export class CustomizableFormPlugin
     };
   }
 
-  public start(core: CoreStart, { embeddable }: AppPluginStartDependencies): CustomizableFormPluginStart {
+  public start(
+    core: CoreStart,
+    { embeddable, uiActions }: AppPluginStartDependencies
+  ): CustomizableFormPluginStart {
     setEmbeddableStateTransfer(embeddable.getStateTransfer());
+    initializeRowPicker(uiActions);
     return {};
   }
 

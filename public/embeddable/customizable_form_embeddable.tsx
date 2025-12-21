@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BehaviorSubject } from 'rxjs';
 import {
   EuiCallOut,
@@ -13,6 +13,7 @@ import { i18n } from '@kbn/i18n';
 import type { EmbeddableFactory } from '@kbn/embeddable-plugin/public';
 import { initializeUnsavedChanges } from '@kbn/presentation-containers';
 import { initializeTitleManager, titleComparators } from '@kbn/presentation-publishing';
+import type { RowClickContext } from '@kbn/ui-actions-plugin/public';
 
 import { CUSTOMIZABLE_FORM_EMBEDDABLE_TYPE, PLUGIN_ID, PLUGIN_NAME } from '../../common';
 import { CustomizableFormPreview } from '../components/form_builder/preview';
@@ -40,6 +41,7 @@ import {
   buildInitialFieldValues,
   getErrorMessage,
 } from '../components/form_builder/utils/form_helpers';
+import { startRowPickerSession, cancelRowPickerSession } from '../services/row_picker';
 
 const documentFromAttributes = (
   attributes: CustomizableFormSavedObjectAttributes<SerializedFormConfig>
@@ -53,8 +55,12 @@ const documentFromAttributes = (
 
 export const getCustomizableFormEmbeddableFactory = ({
   coreStart,
+  pluginsStart,
 }: {
   coreStart: CoreStart;
+  pluginsStart?: {
+    uiActions?: import('@kbn/ui-actions-plugin/public').UiActionsStart;
+  };
 }): EmbeddableFactory<CustomizableFormEmbeddableSerializedState, CustomizableFormEmbeddableApi> => {
   return {
     type: CUSTOMIZABLE_FORM_EMBEDDABLE_TYPE,
@@ -163,6 +169,13 @@ export const getCustomizableFormEmbeddableFactory = ({
           hasSavedObjectReference && !initialDocument
         );
         const [error, setError] = useState<string | null>(null);
+        const [isRowPickerActive, setIsRowPickerActive] = useState<boolean>(false);
+
+        const documentRef = useRef<CustomizableFormDocument | null>(initialDocument);
+
+        useEffect(() => {
+          documentRef.current = document;
+        }, [document]);
 
         useEffect(() => {
           if (!document) {
@@ -229,6 +242,13 @@ export const getCustomizableFormEmbeddableFactory = ({
           };
         }, [currentSavedObjectId, hasSavedObjectReference, http, toasts]);
 
+        useEffect(
+          () => () => {
+            cancelRowPickerSession();
+          },
+          []
+        );
+
         const handleFieldValueChange = useCallback((fieldId: string, value: string) => {
           setFieldValues((prev) => {
             if (prev[fieldId] === value) {
@@ -255,6 +275,124 @@ export const getCustomizableFormEmbeddableFactory = ({
           formConfig,
           fieldValues,
         });
+
+        const applyRowPick = useCallback(
+          (context: RowClickContext) => {
+            const currentDocument = documentRef.current;
+            if (!currentDocument) {
+              return;
+            }
+
+            const rowIndex = context.data?.rowIndex;
+            const table = context.data?.table;
+            if (
+              !table ||
+              typeof rowIndex !== 'number' ||
+              !table.rows ||
+              rowIndex < 0 ||
+              rowIndex >= table.rows.length
+            ) {
+              toasts.addWarning({
+                title: i18n.translate('customizableForm.embeddable.rowPicker.invalidRowTitle', {
+                  defaultMessage: 'Unable to read selected row',
+                }),
+                text: i18n.translate('customizableForm.embeddable.rowPicker.invalidRowBody', {
+                  defaultMessage: 'No row data was found for the selected table entry.',
+                }),
+              });
+              return;
+            }
+
+            const targetColumns = context.data?.columns && context.data.columns.length > 0
+              ? new Set(context.data.columns)
+              : null;
+
+            const selectedRow = table.rows[rowIndex];
+            const columnValueByName = new Map<string, unknown>();
+            table.columns.forEach((column) => {
+              if (targetColumns && !targetColumns.has(column.id)) {
+                return;
+              }
+              const name = (column.name ?? column.id ?? '').trim();
+              if (!name) {
+                return;
+              }
+              columnValueByName.set(name, selectedRow[column.id]);
+            });
+
+            const formatValue = (value: unknown): string => {
+              if (value == null) {
+                return '';
+              }
+              if (typeof value === 'string') return value;
+              if (typeof value === 'number' || typeof value === 'boolean') {
+                return String(value);
+              }
+              try {
+                return JSON.stringify(value);
+              } catch {
+                return String(value);
+              }
+            };
+
+            const missingRequiredLabels: string[] = [];
+            let updatedCount = 0;
+
+            setFieldValues((prev) => {
+              const next = { ...prev };
+              currentDocument.formConfig.fields.forEach((field) => {
+                const label = (field.label || field.key || '').trim();
+                if (!label) {
+                  return;
+                }
+                const columnValue = columnValueByName.get(label);
+                if (columnValue === undefined) {
+                  if (field.required) {
+                    missingRequiredLabels.push(label);
+                  }
+                  return;
+                }
+                next[field.id] = formatValue(columnValue);
+                updatedCount += 1;
+              });
+              return next;
+            });
+
+            if (updatedCount > 0) {
+              toasts.addSuccess({
+                title: i18n.translate('customizableForm.embeddable.rowPicker.prefillSuccessTitle', {
+                  defaultMessage: 'Fields pre-filled',
+                }),
+                text: i18n.translate('customizableForm.embeddable.rowPicker.prefillSuccessBody', {
+                  defaultMessage: '{count} field(s) were filled from the selected row.',
+                  values: { count: updatedCount },
+                }),
+              });
+            } else {
+              toasts.addWarning({
+                title: i18n.translate('customizableForm.embeddable.rowPicker.noFieldsTitle', {
+                  defaultMessage: 'No matching fields found',
+                }),
+                text: i18n.translate('customizableForm.embeddable.rowPicker.noFieldsBody', {
+                  defaultMessage: 'The selected row does not include any matching column names.',
+                }),
+              });
+            }
+
+            if (missingRequiredLabels.length > 0) {
+              toasts.addWarning({
+                title: i18n.translate('customizableForm.embeddable.rowPicker.missingRequiredTitle', {
+                  defaultMessage: 'Some required fields are missing',
+                }),
+                text: i18n.translate('customizableForm.embeddable.rowPicker.missingRequiredBody', {
+                  defaultMessage: 'Missing required columns: {labels}.',
+                  values: { labels: missingRequiredLabels.join(', ') },
+                }),
+              });
+            }
+          },
+          [setFieldValues, toasts]
+        );
 
         const connectorLabelsById = useMemo(() => {
           if (!document) {
@@ -330,6 +468,36 @@ export const getCustomizableFormEmbeddableFactory = ({
           fieldValues,
           connectorLabelsById,
         });
+
+        const handleRowPickerClick = useCallback(async () => {
+          if (!document || document.formConfig.allowRowPicker !== true) {
+            toasts.addWarning({
+              title: i18n.translate('customizableForm.embeddable.rowPicker.notEnabledTitle', {
+                defaultMessage: 'Row picker not enabled',
+              }),
+              text: i18n.translate('customizableForm.embeddable.rowPicker.notEnabledBody', {
+                defaultMessage: 'Enable row picker in the form configuration to use this feature.',
+              }),
+            });
+            return;
+          }
+
+          if (isRowPickerActive) {
+            cancelRowPickerSession();
+            setIsRowPickerActive(false);
+            return;
+          }
+
+          setIsRowPickerActive(true);
+          try {
+            const context = await startRowPickerSession();
+            applyRowPick(context);
+          } catch (err) {
+            // session cancelled or replaced: ignore
+          } finally {
+            setIsRowPickerActive(false);
+          }
+        }, [applyRowPick, document, isRowPickerActive, toasts]);
 
         const isSubmitDisabled = useMemo(() => {
           if (!document) {
@@ -491,6 +659,9 @@ export const getCustomizableFormEmbeddableFactory = ({
                 onSubmit={handleSubmit}
                 validationByFieldId={fieldValidationById}
                 isSubmitting={connectorExecution.isExecuting}
+                enableRowPicker={document.formConfig.allowRowPicker === true}
+                onRowPickerClick={handleRowPickerClick}
+                isRowPickerActive={isRowPickerActive}
               />
               <EuiSpacer size="s" />
             </div>

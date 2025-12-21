@@ -69,6 +69,7 @@ export interface SerializedFormConfig {
   showDescription: boolean;
   layoutColumns?: number;
   requireConfirmationOnSubmit?: boolean;
+  allowRowPicker?: boolean;
   connectors: SerializedConnectorConfig[];
   fields: SerializedFieldConfig[];
 }
@@ -100,6 +101,7 @@ export const serializeFormConfig = (config: FormConfig): SerializedFormConfig =>
   showDescription: config.showDescription,
   layoutColumns: normalizeLayoutColumns(config.layoutColumns),
   requireConfirmationOnSubmit: config.requireConfirmationOnSubmit,
+  allowRowPicker: config.allowRowPicker === true,
   connectors: config.connectors.map(serializeConnector),
   fields: config.fields.map(serializeField),
 });
@@ -136,6 +138,7 @@ export const deserializeFormConfig = (serialized: SerializedFormConfig): FormCon
   showTitle: serialized.showTitle,
   showDescription: serialized.showDescription,
   requireConfirmationOnSubmit: serialized.requireConfirmationOnSubmit === true,
+  allowRowPicker: serialized.allowRowPicker === true,
   layoutColumns: normalizeLayoutColumns(serialized.layoutColumns),
   connectors: serialized.connectors.map(deserializeConnector),
   fields: serialized.fields.map(deserializeField),
