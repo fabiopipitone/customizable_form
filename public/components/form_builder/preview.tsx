@@ -318,6 +318,20 @@ export const CustomizableFormPreview = ({
           <EuiSpacer size="m" />
 
           <EuiFlexGroup gutterSize="s" alignItems="center">
+            <EuiFlexItem grow={false}>
+              <EuiButton
+                fill
+                iconType="play"
+                onClick={onSubmit}
+                disabled={isSubmitDisabled || isSubmitting}
+                isLoading={isSubmitting}
+              >
+                {i18n.translate('customizableForm.builder.previewSubmitButton', {
+                  defaultMessage: 'Submit',
+                })}
+              </EuiButton>
+            </EuiFlexItem>
+
             {enableRowPicker ? (
               <EuiFlexItem grow={false}>
                 <EuiToolTip
@@ -334,7 +348,7 @@ export const CustomizableFormPreview = ({
                   <EuiButtonIcon
                     display="fill"
                     color={isRowPickerActive ? 'primary' : 'text'}
-                    iconType="crosshairs"
+                    iconType={isRowPickerActive ? 'pinFilled' : 'pin'}
                     aria-label={i18n.translate('customizableForm.builder.rowPickerAria', {
                       defaultMessage: 'Start row picker',
                     })}
@@ -344,20 +358,6 @@ export const CustomizableFormPreview = ({
                 </EuiToolTip>
               </EuiFlexItem>
             ) : null}
-
-            <EuiFlexItem grow={false}>
-              <EuiButton
-                fill
-                iconType="play"
-                onClick={onSubmit}
-                disabled={isSubmitDisabled || isSubmitting}
-                isLoading={isSubmitting}
-              >
-                {i18n.translate('customizableForm.builder.previewSubmitButton', {
-                  defaultMessage: 'Submit',
-                })}
-              </EuiButton>
-            </EuiFlexItem>
           </EuiFlexGroup>
         </EuiForm>
       ) : (
