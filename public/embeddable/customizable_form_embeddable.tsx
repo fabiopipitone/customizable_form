@@ -41,7 +41,12 @@ import {
   buildInitialFieldValues,
   getErrorMessage,
 } from '../components/form_builder/utils/form_helpers';
-import { startRowPickerSession, cancelRowPickerSession } from '../services/row_picker';
+import {
+  startRowPickerSession,
+  cancelRowPickerSession,
+  registerRowPickerScope,
+  unregisterRowPickerScope,
+} from '../services/row_picker';
 
 const documentFromAttributes = (
   attributes: CustomizableFormSavedObjectAttributes<SerializedFormConfig>
@@ -172,10 +177,22 @@ export const getCustomizableFormEmbeddableFactory = ({
         const [isRowPickerActive, setIsRowPickerActive] = useState<boolean>(false);
 
         const documentRef = useRef<CustomizableFormDocument | null>(initialDocument);
+        const rowPickerScopeRef = useRef<HTMLDivElement | null>(null);
 
         useEffect(() => {
           documentRef.current = document;
         }, [document]);
+
+        useEffect(() => {
+          if (!document?.formConfig.allowRowPicker || !rowPickerScopeRef.current) {
+            return;
+          }
+          const scope = rowPickerScopeRef.current;
+          registerRowPickerScope(scope);
+          return () => {
+            unregisterRowPickerScope(scope);
+          };
+        }, [document?.formConfig.allowRowPicker, registerRowPickerScope, unregisterRowPickerScope]);
 
         useEffect(() => {
           if (!document) {
@@ -490,7 +507,7 @@ export const getCustomizableFormEmbeddableFactory = ({
 
           setIsRowPickerActive(true);
           try {
-            const context = await startRowPickerSession();
+            const context = await startRowPickerSession(rowPickerScopeRef.current);
             applyRowPick(context);
           } catch (err) {
             // session cancelled or replaced: ignore
@@ -650,7 +667,7 @@ export const getCustomizableFormEmbeddableFactory = ({
               </EuiOverlayMask>
             ) : null}
 
-            <div style={{ width: '100%' }}>
+            <div style={{ width: '100%' }} ref={rowPickerScopeRef}>
               <CustomizableFormPreview
                 config={document.formConfig}
                 fieldValues={fieldValues}

@@ -15,13 +15,77 @@ let isRegistered = false;
 let pendingPicker: PendingPicker | null = null;
 
 const ROW_PICKER_ACTION_ID = 'customizableFormRowPickerAction';
+const ROW_PICKER_SCOPE_CLASS = 'customizableFormRowPickerScope';
 const ROW_PICKER_ACTIVE_CLASS = 'customizableFormRowPickerActive';
+const ROW_PICKER_SCOPE_COUNT_ATTR = 'data-customizable-form-picker-scope-count';
 
-const setRowPickerActiveClass = (active: boolean) => {
-  if (typeof document === 'undefined') {
+let activeScope: HTMLElement | null = null;
+
+const resolveScopeElement = (source?: HTMLElement | null): HTMLElement | null => {
+  if (!source) {
+    return null;
+  }
+  const viewport = source.closest<HTMLElement>('.dshDashboardViewport');
+  if (viewport) {
+    return viewport;
+  }
+  const wrapper = source.closest<HTMLElement>('.dshDashboardViewportWrapper');
+  if (wrapper) {
+    return wrapper;
+  }
+  return source;
+};
+
+const updateScopeCount = (scope: HTMLElement, delta: number) => {
+  const current = Number(scope.getAttribute(ROW_PICKER_SCOPE_COUNT_ATTR)) || 0;
+  const next = Math.max(0, current + delta);
+  if (next === 0) {
+    scope.removeAttribute(ROW_PICKER_SCOPE_COUNT_ATTR);
+    scope.classList.remove(ROW_PICKER_SCOPE_CLASS);
+    scope.classList.remove(ROW_PICKER_ACTIVE_CLASS);
+    if (activeScope === scope) {
+      activeScope = null;
+    }
     return;
   }
-  document.body.classList.toggle(ROW_PICKER_ACTIVE_CLASS, active);
+  scope.setAttribute(ROW_PICKER_SCOPE_COUNT_ATTR, String(next));
+  scope.classList.add(ROW_PICKER_SCOPE_CLASS);
+};
+
+export const registerRowPickerScope = (scopeElement?: HTMLElement | null) => {
+  const scope = resolveScopeElement(scopeElement);
+  if (!scope) {
+    return;
+  }
+  updateScopeCount(scope, 1);
+};
+
+export const unregisterRowPickerScope = (scopeElement?: HTMLElement | null) => {
+  const scope = resolveScopeElement(scopeElement);
+  if (!scope) {
+    return;
+  }
+  updateScopeCount(scope, -1);
+};
+
+const setRowPickerActiveClass = (active: boolean, scopeElement?: HTMLElement | null) => {
+  const scope = resolveScopeElement(scopeElement) ?? activeScope;
+  if (!scope) {
+    return;
+  }
+  if (active) {
+    if (activeScope && activeScope !== scope) {
+      activeScope.classList.remove(ROW_PICKER_ACTIVE_CLASS);
+    }
+    scope.classList.add(ROW_PICKER_SCOPE_CLASS);
+    scope.classList.add(ROW_PICKER_ACTIVE_CLASS);
+    activeScope = scope;
+  } else {
+    scope.classList.remove(ROW_PICKER_ACTIVE_CLASS);
+    if (activeScope === scope) {
+      activeScope = null;
+    }
+  }
 };
 
 export const initializeRowPicker = (uiActionsStart: UiActionsStart) => {
@@ -57,7 +121,7 @@ export const initializeRowPicker = (uiActionsStart: UiActionsStart) => {
   isRegistered = true;
 };
 
-export const startRowPickerSession = (): Promise<RowClickContext> => {
+export const startRowPickerSession = (scopeElement?: HTMLElement | null): Promise<RowClickContext> => {
   if (!uiActions || !uiActions.hasTrigger(ROW_CLICK_TRIGGER)) {
     return Promise.reject(new Error('Row picker is not available.'));
   }
@@ -70,7 +134,7 @@ export const startRowPickerSession = (): Promise<RowClickContext> => {
 
   return new Promise<RowClickContext>((resolve, reject) => {
     pendingPicker = { resolve, reject };
-    setRowPickerActiveClass(true);
+    setRowPickerActiveClass(true, scopeElement);
   });
 };
 
