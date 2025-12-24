@@ -65,6 +65,7 @@ export class CustomizableFormPlugin
           coreStart,
           pluginsStart: {
             uiActions: depsStart.uiActions,
+            data: depsStart.data,
           },
         });
       }
