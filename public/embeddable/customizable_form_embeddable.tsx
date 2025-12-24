@@ -319,18 +319,34 @@ export const getCustomizableFormEmbeddableFactory = ({
         });
 
         const formatValue = useCallback((value: unknown): string => {
-          if (value == null) {
-            return '';
-          }
-          if (typeof value === 'string') return value;
-          if (typeof value === 'number' || typeof value === 'boolean') {
-            return String(value);
-          }
-          try {
-            return JSON.stringify(value);
-          } catch {
-            return String(value);
-          }
+          const normalize = (next: unknown): string => {
+            if (next == null) {
+              return '';
+            }
+            if (Array.isArray(next)) {
+              if (next.length === 0) {
+                return '';
+              }
+              if (next.length === 1) {
+                return normalize(next[0]);
+              }
+              return next
+                .map((entry) => normalize(entry))
+                .filter((entry) => entry.length > 0)
+                .join(', ');
+            }
+            if (typeof next === 'string') return next;
+            if (typeof next === 'number' || typeof next === 'boolean') {
+              return String(next);
+            }
+            try {
+              return JSON.stringify(next);
+            } catch {
+              return String(next);
+            }
+          };
+
+          return normalize(value);
         }, []);
 
         const applyFieldValuesFromMap = useCallback(
