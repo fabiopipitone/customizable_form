@@ -29,9 +29,22 @@
   border-radius: 999px;
 }
 
+.customizableFormRowPickerScope:not(.customizableFormRowPickerActive) .unifiedDataTable [data-test-subj="dataGridColumnCellAction-customizableFormRowPickerCellAction"] {
+  display: none !important;
+}
+
+.customizableFormRowPickerScope.customizableFormRowPickerActive .unifiedDataTable .euiDataGridRowCell[data-gridcell-column-id="_id"] .euiDataGridRowCell__content,
+.customizableFormRowPickerScope.customizableFormRowPickerActive .unifiedDataTable .euiDataGridHeaderCell[data-gridcell-column-id="_id"] .euiDataGridHeaderCell__content {
+  animation: customizableFormRowPickerPulse 1.6s ease-in-out infinite;
+  background: #eef5ff;
+  border-radius: 6px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .customizableFormRowPickerScope.customizableFormRowPickerActive .euiDataGridRowCell--controlColumn[data-gridcell-column-id="trailingControlColumn"] button,
-  .customizableFormRowPickerScope.customizableFormRowPickerActive .euiDataGridRowCell--controlColumn[data-gridcell-column-id="trailingControlColumn"] [data-test-subj] {
+  .customizableFormRowPickerScope.customizableFormRowPickerActive .euiDataGridRowCell--controlColumn[data-gridcell-column-id="trailingControlColumn"] [data-test-subj],
+  .customizableFormRowPickerScope.customizableFormRowPickerActive .unifiedDataTable .euiDataGridRowCell[data-gridcell-column-id="_id"] .euiDataGridRowCell__content,
+  .customizableFormRowPickerScope.customizableFormRowPickerActive .unifiedDataTable .euiDataGridHeaderCell[data-gridcell-column-id="_id"] .euiDataGridHeaderCell__content {
     animation: none;
   }
 }
