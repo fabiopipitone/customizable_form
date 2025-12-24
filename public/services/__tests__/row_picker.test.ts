@@ -58,4 +58,39 @@ describe('row picker scope helpers', () => {
     await expect(sessionPromise).rejects.toThrow('Row picker session cancelled.');
     expect(viewport.classList.contains('customizableFormRowPickerActive')).toBe(false);
   });
+
+  it('registers cell action for saved search _id cells', async () => {
+    const { initializeRowPicker } = await import('../row_picker');
+
+    const registerAction = jest.fn();
+    const attachAction = jest.fn();
+    const hasTrigger = jest.fn((id: string) =>
+      ['ROW_CLICK_TRIGGER', 'DISCOVER_CELL_ACTIONS_TRIGGER_ID'].includes(id)
+    );
+
+    initializeRowPicker({ hasTrigger, registerAction, attachAction } as any);
+
+    const registeredIds = registerAction.mock.calls.map(([definition]) => definition.id);
+    expect(registeredIds).toEqual(
+      expect.arrayContaining([
+        'customizableFormRowPickerAction',
+        'customizableFormRowPickerCellAction',
+      ])
+    );
+    expect(attachAction).toHaveBeenCalledWith(
+      'DISCOVER_CELL_ACTIONS_TRIGGER_ID',
+      'customizableFormRowPickerCellAction'
+    );
+
+    const cellAction = registerAction.mock.calls
+      .map(([definition]) => definition)
+      .find((definition) => definition.id === 'customizableFormRowPickerCellAction');
+
+    expect(
+      await cellAction.isCompatible({ data: [{ field: { name: '_id' } }] } as any)
+    ).toBe(true);
+    expect(
+      await cellAction.isCompatible({ data: [{ field: { name: 'carrier' } }] } as any)
+    ).toBe(false);
+  });
 });

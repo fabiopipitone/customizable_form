@@ -358,26 +358,30 @@ export const getCustomizableFormEmbeddableFactory = ({
 
             const missingRequiredLabels: string[] = [];
             let updatedCount = 0;
+            const nextValues: Record<string, string> = {};
 
-            setFieldValues((prev) => {
-              const next = { ...prev };
-              currentDocument.formConfig.fields.forEach((field) => {
-                const label = (field.label || field.key || '').trim();
-                if (!label) {
-                  return;
+            currentDocument.formConfig.fields.forEach((field) => {
+              const label = (field.label || field.key || '').trim();
+              if (!label) {
+                return;
+              }
+              const columnValue = columnValueByName.get(label);
+              if (columnValue === undefined) {
+                if (field.required) {
+                  missingRequiredLabels.push(label);
                 }
-                const columnValue = columnValueByName.get(label);
-                if (columnValue === undefined) {
-                  if (field.required) {
-                    missingRequiredLabels.push(label);
-                  }
-                  return;
-                }
-                next[field.id] = formatValue(columnValue);
-                updatedCount += 1;
-              });
-              return next;
+                return;
+              }
+              nextValues[field.id] = formatValue(columnValue);
+              updatedCount += 1;
             });
+
+            if (Object.keys(nextValues).length > 0) {
+              setFieldValues((prev) => ({
+                ...prev,
+                ...nextValues,
+              }));
+            }
 
             return { updatedCount, missingRequiredLabels };
           },
