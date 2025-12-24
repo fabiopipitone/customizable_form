@@ -5,6 +5,13 @@ import { BehaviorSubject } from 'rxjs';
 import { CustomizableFormPreview } from '../../components/form_builder/preview';
 import { getCustomizableFormEmbeddableFactory } from '../customizable_form_embeddable';
 import type { SerializedFormConfig } from '../../components/form_builder/serialization';
+import {
+  registerRowPickerScope,
+  startRowPickerSession,
+  unregisterRowPickerScope,
+} from '../../services/row_picker';
+
+let latestPreviewProps: any;
 
 jest.mock('../../services/persistence', () => ({
   resolveCustomizableForm: jest.fn().mockResolvedValue({
@@ -30,8 +37,24 @@ jest.mock('../../services/persistence', () => ({
   })),
 }));
 
-jest.mock('../../components/form_builder/preview', () => ({
-  CustomizableFormPreview: jest.fn(() => <div data-test-subj="preview">Preview</div>),
+jest.mock('../../components/form_builder/preview', () => {
+  const actual = jest.requireActual('../../components/form_builder/preview');
+  return {
+    ...actual,
+    CustomizableFormPreview: jest.fn((props) => {
+      latestPreviewProps = props;
+      return <div data-test-subj="preview">Preview</div>;
+    }),
+  };
+});
+
+jest.mock('../../services/row_picker', () => ({
+  registerRowPickerScope: jest.fn(),
+  unregisterRowPickerScope: jest.fn(),
+  startRowPickerSession: jest.fn().mockResolvedValue({
+    data: { rowIndex: 0, table: { rows: [], columns: [] } },
+  }),
+  cancelRowPickerSession: jest.fn(),
 }));
 
 const SERIALIZED_FORM: SerializedFormConfig = {
@@ -55,10 +78,15 @@ const SERIALIZED_FORM: SerializedFormConfig = {
 };
 
 const createEmbeddable = async (overrides?: Partial<SerializedFormConfig>) => {
+  const toasts = {
+    addDanger: jest.fn(),
+    addWarning: jest.fn(),
+    addSuccess: jest.fn(),
+  };
   const factory = getCustomizableFormEmbeddableFactory({
     coreStart: {
       http: {} as any,
-      notifications: { toasts: { addDanger: jest.fn(), addWarning: jest.fn(), addSuccess: jest.fn() } } as any,
+      notifications: { toasts } as any,
     } as any,
   });
 
@@ -86,10 +114,22 @@ const createEmbeddable = async (overrides?: Partial<SerializedFormConfig>) => {
     uuid: 'test-embeddable',
   });
 
-  return { Component, phase$ };
+  return { Component, phase$, toasts };
 };
 
 describe('customizable form embeddable', () => {
+  beforeEach(() => {
+    latestPreviewProps = undefined;
+    jest.clearAllMocks();
+    (CustomizableFormPreview as jest.Mock).mockImplementation((props) => {
+      latestPreviewProps = props;
+      return <div data-test-subj="preview">Preview</div>;
+    });
+    (startRowPickerSession as jest.Mock).mockResolvedValue({
+      data: { rowIndex: 0, table: { rows: [], columns: [] } },
+    });
+  });
+
   it('renders preview after loading state', async () => {
     const { Component, phase$ } = await createEmbeddable();
     const { unmount } = render(<Component />);
@@ -99,9 +139,10 @@ describe('customizable form embeddable', () => {
   });
 
   it('shows confirmation modal when requireConfirmationOnSubmit is true', async () => {
-    (CustomizableFormPreview as jest.Mock).mockImplementation(({ onSubmit }) => (
-      <button onClick={onSubmit}>Submit</button>
-    ));
+    (CustomizableFormPreview as jest.Mock).mockImplementation((props) => {
+      latestPreviewProps = props;
+      return <button onClick={props.onSubmit}>Submit</button>;
+    });
 
     const { Component, phase$ } = await createEmbeddable({ requireConfirmationOnSubmit: true });
     const { unmount } = render(<Component />);
@@ -111,4 +152,47 @@ describe('customizable form embeddable', () => {
     unmount();
     phase$.complete();
   });
+
+  it('registers and unregisters row picker scope when enabled', async () => {
+    const { Component, phase$ } = await createEmbeddable({ allowRowPicker: true });
+    const { unmount } = render(
+      <div className="dshDashboardViewport">
+        <Component />
+      </div>
+    );
+
+    expect(registerRowPickerScope).toHaveBeenCalledTimes(1);
+    expect(registerRowPickerScope).toHaveBeenCalledWith(expect.any(HTMLElement));
+
+    unmount();
+    expect(unregisterRowPickerScope).toHaveBeenCalledTimes(1);
+    phase$.complete();
+  });
+
+  it('starts row picker session with the scoped element', async () => {
+    (CustomizableFormPreview as jest.Mock).mockImplementation((props) => {
+      latestPreviewProps = props;
+      return (
+        <button onClick={props.onRowPickerClick} disabled={!props.enableRowPicker}>
+          Pin
+        </button>
+      );
+    });
+
+    const { Component, phase$ } = await createEmbeddable({ allowRowPicker: true });
+    const { unmount } = render(
+      <div className="dshDashboardViewport">
+        <Component />
+      </div>
+    );
+
+    fireEvent.click(await screen.findByText('Pin'));
+
+    expect(startRowPickerSession).toHaveBeenCalledTimes(1);
+    expect(startRowPickerSession).toHaveBeenCalledWith(expect.any(HTMLElement));
+
+    unmount();
+    phase$.complete();
+  });
+
 });
