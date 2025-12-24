@@ -16,64 +16,11 @@ let pendingPicker: PendingPicker | null = null;
 
 const ROW_PICKER_ACTION_ID = 'customizableFormRowPickerAction';
 const ROW_PICKER_ACTIVE_CLASS = 'customizableFormRowPickerActive';
-const ROW_PICKER_STYLE_ID = 'customizableFormRowPickerStyles';
-
-const ensureRowPickerStyles = () => {
-  if (typeof document === 'undefined') {
-    return;
-  }
-  if (document.getElementById(ROW_PICKER_STYLE_ID)) {
-    return;
-  }
-  const style = document.createElement('style');
-  style.id = ROW_PICKER_STYLE_ID;
-  style.textContent = `
-@keyframes customizableFormRowPickerPulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(0, 95, 204, 0.35);
-  }
-  70% {
-    box-shadow: 0 0 0 6px rgba(0, 95, 204, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(0, 95, 204, 0);
-  }
-}
-
-body:not(.${ROW_PICKER_ACTIVE_CLASS}) .euiDataGridHeaderCell--controlColumn#trailingControlColumn,
-body:not(.${ROW_PICKER_ACTIVE_CLASS}) .euiDataGridRowCell--controlColumn[data-gridcell-column-id="trailingControlColumn"] {
-  display: none !important;
-  width: 0 !important;
-  min-width: 0 !important;
-  padding: 0 !important;
-}
-
-body.${ROW_PICKER_ACTIVE_CLASS} .euiDataGridHeaderCell--controlColumn#trailingControlColumn,
-body.${ROW_PICKER_ACTIVE_CLASS} .euiDataGridRowCell--controlColumn[data-gridcell-column-id="trailingControlColumn"] {
-  background: #eef5ff !important;
-}
-
-body.${ROW_PICKER_ACTIVE_CLASS} .euiDataGridRowCell--controlColumn[data-gridcell-column-id="trailingControlColumn"] button,
-body.${ROW_PICKER_ACTIVE_CLASS} .euiDataGridRowCell--controlColumn[data-gridcell-column-id="trailingControlColumn"] [data-test-subj] {
-  animation: customizableFormRowPickerPulse 1.6s ease-in-out infinite;
-  border-radius: 999px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  body.${ROW_PICKER_ACTIVE_CLASS} .euiDataGridRowCell--controlColumn[data-gridcell-column-id="trailingControlColumn"] button,
-  body.${ROW_PICKER_ACTIVE_CLASS} .euiDataGridRowCell--controlColumn[data-gridcell-column-id="trailingControlColumn"] [data-test-subj] {
-    animation: none;
-  }
-}
-`;
-  document.head.appendChild(style);
-};
 
 const setRowPickerActiveClass = (active: boolean) => {
   if (typeof document === 'undefined') {
     return;
   }
-  ensureRowPickerStyles();
   document.body.classList.toggle(ROW_PICKER_ACTIVE_CLASS, active);
 };
 
@@ -105,7 +52,6 @@ export const initializeRowPicker = (uiActionsStart: UiActionsStart) => {
     shouldAutoExecute: async () => true,
   };
 
-  ensureRowPickerStyles();
   uiActions.registerAction(action);
   uiActions.attachAction(ROW_CLICK_TRIGGER, ROW_PICKER_ACTION_ID);
   isRegistered = true;

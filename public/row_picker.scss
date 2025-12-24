@@ -1,0 +1,37 @@
+@keyframes customizableFormRowPickerPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(0, 95, 204, 0.35);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(0, 95, 204, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 95, 204, 0);
+  }
+}
+
+body:not(.customizableFormRowPickerActive) .euiDataGridHeaderCell--controlColumn#trailingControlColumn,
+body:not(.customizableFormRowPickerActive) .euiDataGridRowCell--controlColumn[data-gridcell-column-id="trailingControlColumn"] {
+  display: none !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+}
+
+body.customizableFormRowPickerActive .euiDataGridHeaderCell--controlColumn#trailingControlColumn,
+body.customizableFormRowPickerActive .euiDataGridRowCell--controlColumn[data-gridcell-column-id="trailingControlColumn"] {
+  background: #eef5ff !important;
+}
+
+body.customizableFormRowPickerActive .euiDataGridRowCell--controlColumn[data-gridcell-column-id="trailingControlColumn"] button,
+body.customizableFormRowPickerActive .euiDataGridRowCell--controlColumn[data-gridcell-column-id="trailingControlColumn"] [data-test-subj] {
+  animation: customizableFormRowPickerPulse 1.6s ease-in-out infinite;
+  border-radius: 999px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.customizableFormRowPickerActive .euiDataGridRowCell--controlColumn[data-gridcell-column-id="trailingControlColumn"] button,
+  body.customizableFormRowPickerActive .euiDataGridRowCell--controlColumn[data-gridcell-column-id="trailingControlColumn"] [data-test-subj] {
+    animation: none;
+  }
+}
