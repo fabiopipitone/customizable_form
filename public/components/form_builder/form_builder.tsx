@@ -51,6 +51,7 @@ const INITIAL_CONFIG: FormConfig = {
   showDescription: true,
   layoutColumns: DEFAULT_LAYOUT_COLUMNS,
   requireConfirmationOnSubmit: false,
+  allowRowPicker: false,
   connectors: INITIAL_CONNECTORS,
   fields: [
     {

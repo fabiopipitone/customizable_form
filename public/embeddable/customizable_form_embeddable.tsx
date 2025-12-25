@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { BehaviorSubject } from 'rxjs';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BehaviorSubject, lastValueFrom } from 'rxjs';
 import {
   EuiCallOut,
   EuiConfirmModal,
@@ -13,6 +13,21 @@ import { i18n } from '@kbn/i18n';
 import type { EmbeddableFactory } from '@kbn/embeddable-plugin/public';
 import { initializeUnsavedChanges } from '@kbn/presentation-containers';
 import { initializeTitleManager, titleComparators } from '@kbn/presentation-publishing';
+import type { DataPublicPluginStart } from '@kbn/data-plugin/public';
+import { getEsQueryConfig } from '@kbn/data-plugin/public';
+import type { CellActionExecutionContext } from '@kbn/cell-actions';
+import {
+  buildCustomFilter,
+  buildEsQuery,
+  FilterStateStore,
+  type AggregateQuery,
+  type Filter,
+  type Query,
+  type TimeRange,
+} from '@kbn/es-query';
+import { buildDataTableRecord } from '@kbn/discover-utils';
+import type { DataView } from '@kbn/data-views-plugin/common';
+import type { estypes } from '@elastic/elasticsearch';
 
 import { CUSTOMIZABLE_FORM_EMBEDDABLE_TYPE, PLUGIN_ID, PLUGIN_NAME } from '../../common';
 import { CustomizableFormPreview } from '../components/form_builder/preview';
@@ -40,6 +55,14 @@ import {
   buildInitialFieldValues,
   getErrorMessage,
 } from '../components/form_builder/utils/form_helpers';
+import {
+  startRowPickerSession,
+  cancelRowPickerSession,
+  registerRowPickerScope,
+  unregisterRowPickerScope,
+  isCellActionContext,
+  type RowPickerContext,
+} from '../services/row_picker';
 
 const documentFromAttributes = (
   attributes: CustomizableFormSavedObjectAttributes<SerializedFormConfig>
@@ -51,10 +74,22 @@ const documentFromAttributes = (
   },
 });
 
+type SavedSearchRowPickerMetadata = {
+  dataView?: DataView;
+  query?: Query | AggregateQuery;
+  filters?: Filter[];
+  timeRange?: TimeRange;
+};
+
 export const getCustomizableFormEmbeddableFactory = ({
   coreStart,
+  pluginsStart,
 }: {
   coreStart: CoreStart;
+  pluginsStart?: {
+    uiActions?: import('@kbn/ui-actions-plugin/public').UiActionsStart;
+    data?: DataPublicPluginStart;
+  };
 }): EmbeddableFactory<CustomizableFormEmbeddableSerializedState, CustomizableFormEmbeddableApi> => {
   return {
     type: CUSTOMIZABLE_FORM_EMBEDDABLE_TYPE,
@@ -140,6 +175,7 @@ export const getCustomizableFormEmbeddableFactory = ({
 
       const http = coreStart.http;
       const { toasts } = coreStart.notifications;
+      const data = pluginsStart?.data;
 
       const Component: React.FC = () => {
         const [currentSavedObjectId, setCurrentSavedObjectId] = useState<string | null>(
@@ -163,6 +199,25 @@ export const getCustomizableFormEmbeddableFactory = ({
           hasSavedObjectReference && !initialDocument
         );
         const [error, setError] = useState<string | null>(null);
+        const [isRowPickerActive, setIsRowPickerActive] = useState<boolean>(false);
+
+        const documentRef = useRef<CustomizableFormDocument | null>(initialDocument);
+        const rowPickerScopeRef = useRef<HTMLDivElement | null>(null);
+
+        useEffect(() => {
+          documentRef.current = document;
+        }, [document]);
+
+        useEffect(() => {
+          if (!document?.formConfig.allowRowPicker || !rowPickerScopeRef.current) {
+            return;
+          }
+          const scope = rowPickerScopeRef.current;
+          registerRowPickerScope(scope);
+          return () => {
+            unregisterRowPickerScope(scope);
+          };
+        }, [document?.formConfig.allowRowPicker, registerRowPickerScope, unregisterRowPickerScope]);
 
         useEffect(() => {
           if (!document) {
@@ -229,6 +284,13 @@ export const getCustomizableFormEmbeddableFactory = ({
           };
         }, [currentSavedObjectId, hasSavedObjectReference, http, toasts]);
 
+        useEffect(
+          () => () => {
+            cancelRowPickerSession();
+          },
+          []
+        );
+
         const handleFieldValueChange = useCallback((fieldId: string, value: string) => {
           setFieldValues((prev) => {
             if (prev[fieldId] === value) {
@@ -255,6 +317,351 @@ export const getCustomizableFormEmbeddableFactory = ({
           formConfig,
           fieldValues,
         });
+
+        const formatValue = useCallback((value: unknown): string => {
+          const normalize = (next: unknown): string => {
+            if (next == null) {
+              return '';
+            }
+            if (Array.isArray(next)) {
+              if (next.length === 0) {
+                return '';
+              }
+              if (next.length === 1) {
+                return normalize(next[0]);
+              }
+              return next
+                .map((entry) => normalize(entry))
+                .filter((entry) => entry.length > 0)
+                .join(', ');
+            }
+            if (typeof next === 'string') return next;
+            if (typeof next === 'number' || typeof next === 'boolean') {
+              return String(next);
+            }
+            try {
+              return JSON.stringify(next);
+            } catch {
+              return String(next);
+            }
+          };
+
+          return normalize(value);
+        }, []);
+
+        const applyFieldValuesFromMap = useCallback(
+          (columnValueByName: Map<string, unknown>) => {
+            const currentDocument = documentRef.current;
+            if (!currentDocument) {
+              return { updatedCount: 0, missingRequiredLabels: [] as string[] };
+            }
+
+            const missingRequiredLabels: string[] = [];
+            let updatedCount = 0;
+            const nextValues: Record<string, string> = {};
+
+            currentDocument.formConfig.fields.forEach((field) => {
+              const label = (field.label || field.key || '').trim();
+              if (!label) {
+                return;
+              }
+              const columnValue = columnValueByName.get(label);
+              if (columnValue === undefined) {
+                if (field.required) {
+                  missingRequiredLabels.push(label);
+                }
+                return;
+              }
+              nextValues[field.id] = formatValue(columnValue);
+              updatedCount += 1;
+            });
+
+            if (Object.keys(nextValues).length > 0) {
+              setFieldValues((prev) => ({
+                ...prev,
+                ...nextValues,
+              }));
+            }
+
+            return { updatedCount, missingRequiredLabels };
+          },
+          [formatValue, setFieldValues]
+        );
+
+        const applyPrefillToasts = useCallback(
+          (updatedCount: number, missingRequiredLabels: string[]) => {
+            if (updatedCount > 0) {
+              toasts.addSuccess({
+                title: i18n.translate('customizableForm.embeddable.rowPicker.prefillSuccessTitle', {
+                  defaultMessage: 'Fields pre-filled',
+                }),
+                text: i18n.translate('customizableForm.embeddable.rowPicker.prefillSuccessBody', {
+                  defaultMessage: '{count} field(s) were filled from the selected row.',
+                  values: { count: updatedCount },
+                }),
+              });
+            } else {
+              toasts.addWarning({
+                title: i18n.translate('customizableForm.embeddable.rowPicker.noFieldsTitle', {
+                  defaultMessage: 'No matching fields found',
+                }),
+                text: i18n.translate('customizableForm.embeddable.rowPicker.noFieldsBody', {
+                  defaultMessage: 'The selected row does not include any matching column names.',
+                }),
+              });
+            }
+
+            if (missingRequiredLabels.length > 0) {
+              toasts.addWarning({
+                title: i18n.translate('customizableForm.embeddable.rowPicker.missingRequiredTitle', {
+                  defaultMessage: 'Some required fields are missing',
+                }),
+                text: i18n.translate('customizableForm.embeddable.rowPicker.missingRequiredBody', {
+                  defaultMessage: 'Missing required columns: {labels}.',
+                  values: { labels: missingRequiredLabels.join(', ') },
+                }),
+              });
+            }
+          },
+          [toasts]
+        );
+
+        const applyLensRowPick = useCallback(
+          (context: RowPickerContext) => {
+            if (isCellActionContext(context)) {
+              return;
+            }
+
+            const rowIndex = context.data?.rowIndex;
+            const table = context.data?.table;
+            if (
+              !table ||
+              typeof rowIndex !== 'number' ||
+              !table.rows ||
+              rowIndex < 0 ||
+              rowIndex >= table.rows.length
+            ) {
+              toasts.addWarning({
+                title: i18n.translate('customizableForm.embeddable.rowPicker.invalidRowTitle', {
+                  defaultMessage: 'Unable to read selected row',
+                }),
+                text: i18n.translate('customizableForm.embeddable.rowPicker.invalidRowBody', {
+                  defaultMessage: 'No row data was found for the selected table entry.',
+                }),
+              });
+              return;
+            }
+
+            const targetColumns =
+              context.data?.columns && context.data.columns.length > 0
+                ? new Set(context.data.columns)
+                : null;
+
+            const selectedRow = table.rows[rowIndex];
+            const columnValueByName = new Map<string, unknown>();
+            table.columns.forEach((column) => {
+              if (targetColumns && !targetColumns.has(column.id)) {
+                return;
+              }
+              const name = (column.name ?? column.id ?? '').trim();
+              if (!name) {
+                return;
+              }
+              columnValueByName.set(name, selectedRow[column.id]);
+            });
+
+            const { updatedCount, missingRequiredLabels } = applyFieldValuesFromMap(columnValueByName);
+            applyPrefillToasts(updatedCount, missingRequiredLabels);
+          },
+          [applyFieldValuesFromMap, applyPrefillToasts, toasts]
+        );
+
+        const fetchSavedSearchRecord = useCallback(
+          async (context: CellActionExecutionContext) => {
+            if (!data) {
+              toasts.addWarning({
+                title: i18n.translate(
+                  'customizableForm.embeddable.rowPicker.savedSearch.noDataTitle',
+                  {
+                    defaultMessage: 'Row picker is not available',
+                  }
+                ),
+                text: i18n.translate(
+                  'customizableForm.embeddable.rowPicker.savedSearch.noDataBody',
+                  {
+                    defaultMessage: 'The data plugin is not available for this panel.',
+                  }
+                ),
+              });
+              return null;
+            }
+
+            const metadata = (context.metadata ?? {}) as SavedSearchRowPickerMetadata;
+            const dataView = metadata.dataView;
+            const rawId = context.data?.[0]?.value;
+            if (!dataView || rawId == null) {
+              toasts.addWarning({
+                title: i18n.translate(
+                  'customizableForm.embeddable.rowPicker.savedSearch.invalidSelectionTitle',
+                  {
+                    defaultMessage: 'Unable to read selected document',
+                  }
+                ),
+                text: i18n.translate(
+                  'customizableForm.embeddable.rowPicker.savedSearch.invalidSelectionBody',
+                  {
+                    defaultMessage: 'The selected cell does not include a valid document id.',
+                  }
+                ),
+              });
+              return null;
+            }
+
+            const id = typeof rawId === 'string' ? rawId : String(rawId);
+            const filters: Filter[] = [...(metadata.filters ?? [])];
+            if (metadata.timeRange) {
+              const timeFilter = data.query.timefilter.timefilter.createFilter(
+                dataView,
+                metadata.timeRange
+              );
+              if (timeFilter) {
+                filters.push(timeFilter);
+              }
+            }
+            filters.push(
+              buildCustomFilter(
+                dataView.id ?? dataView.getIndexPattern(),
+                { ids: { values: [id] } },
+                false,
+                false,
+                null,
+                FilterStateStore.APP_STATE
+              )
+            );
+
+            try {
+              const computedFields = dataView.getComputedFields();
+              const runtimeFields = computedFields.runtimeFields as estypes.MappingRuntimeFields;
+              const query = buildEsQuery(
+                dataView,
+                metadata.query ?? { query: '', language: 'kuery' },
+                filters,
+                getEsQueryConfig(coreStart.uiSettings)
+              );
+              const response = await lastValueFrom(
+                data.search.search({
+                  params: {
+                    index: dataView.getIndexPattern(),
+                    body: {
+                      size: 2,
+                      query,
+                      stored_fields: ['*'],
+                      script_fields: computedFields.scriptFields,
+                      version: true,
+                      _source: true,
+                      runtime_mappings: runtimeFields ? runtimeFields : {},
+                      fields: [
+                        { field: '*', include_unmapped: true },
+                        ...(computedFields.docvalueFields || []),
+                      ],
+                    },
+                  },
+                })
+              );
+              const hits = response.rawResponse?.hits?.hits ?? [];
+              if (hits.length === 0) {
+                toasts.addWarning({
+                  title: i18n.translate(
+                    'customizableForm.embeddable.rowPicker.savedSearch.noHitsTitle',
+                    {
+                      defaultMessage: 'Document not found',
+                    }
+                  ),
+                  text: i18n.translate(
+                    'customizableForm.embeddable.rowPicker.savedSearch.noHitsBody',
+                    {
+                      defaultMessage: 'No document could be loaded for the selected _id.',
+                    }
+                  ),
+                });
+                return null;
+              }
+
+              return {
+                record: buildDataTableRecord(hits[0], dataView),
+                hasMultipleHits: hits.length > 1,
+              };
+            } catch (err) {
+              toasts.addWarning({
+                title: i18n.translate(
+                  'customizableForm.embeddable.rowPicker.savedSearch.fetchErrorTitle',
+                  {
+                    defaultMessage: 'Unable to load document',
+                  }
+                ),
+                text: i18n.translate(
+                  'customizableForm.embeddable.rowPicker.savedSearch.fetchErrorBody',
+                  {
+                    defaultMessage: 'The selected _id could not be retrieved from the saved search.',
+                  }
+                ),
+              });
+              return null;
+            }
+          },
+          [coreStart.uiSettings, data, toasts]
+        );
+
+        const applySavedSearchRowPick = useCallback(
+          async (context: CellActionExecutionContext) => {
+            const result = await fetchSavedSearchRecord(context);
+            if (!result) {
+              return;
+            }
+
+            const columnValueByName = new Map<string, unknown>();
+            Object.entries(result.record.flattened ?? {}).forEach(([key, value]) => {
+              const name = key.trim();
+              if (!name) {
+                return;
+              }
+              columnValueByName.set(name, value);
+            });
+
+            const { updatedCount, missingRequiredLabels } = applyFieldValuesFromMap(columnValueByName);
+            applyPrefillToasts(updatedCount, missingRequiredLabels);
+
+            if (result.hasMultipleHits) {
+              toasts.addWarning({
+                title: i18n.translate(
+                  'customizableForm.embeddable.rowPicker.savedSearch.multipleHitsTitle',
+                  {
+                    defaultMessage: 'Multiple documents found',
+                  }
+                ),
+                text: i18n.translate(
+                  'customizableForm.embeddable.rowPicker.savedSearch.multipleHitsBody',
+                  {
+                    defaultMessage:
+                      'More than one document matched this _id. The first result was used.',
+                  }
+                ),
+              });
+            }
+          },
+          [applyFieldValuesFromMap, applyPrefillToasts, fetchSavedSearchRecord, toasts]
+        );
+
+        const applyRowPick = useCallback(
+          async (context: RowPickerContext) => {
+            if (isCellActionContext(context)) {
+              await applySavedSearchRowPick(context);
+              return;
+            }
+            applyLensRowPick(context);
+          },
+          [applyLensRowPick, applySavedSearchRowPick]
+        );
 
         const connectorLabelsById = useMemo(() => {
           if (!document) {
@@ -330,6 +737,36 @@ export const getCustomizableFormEmbeddableFactory = ({
           fieldValues,
           connectorLabelsById,
         });
+
+        const handleRowPickerClick = useCallback(async () => {
+          if (!document || document.formConfig.allowRowPicker !== true) {
+            toasts.addWarning({
+              title: i18n.translate('customizableForm.embeddable.rowPicker.notEnabledTitle', {
+                defaultMessage: 'Row picker not enabled',
+              }),
+              text: i18n.translate('customizableForm.embeddable.rowPicker.notEnabledBody', {
+                defaultMessage: 'Enable row picker in the form configuration to use this feature.',
+              }),
+            });
+            return;
+          }
+
+          if (isRowPickerActive) {
+            cancelRowPickerSession();
+            setIsRowPickerActive(false);
+            return;
+          }
+
+          setIsRowPickerActive(true);
+          try {
+            const context = await startRowPickerSession(rowPickerScopeRef.current);
+            await applyRowPick(context);
+          } catch (err) {
+            // session cancelled or replaced: ignore
+          } finally {
+            setIsRowPickerActive(false);
+          }
+        }, [applyRowPick, document, isRowPickerActive, toasts]);
 
         const isSubmitDisabled = useMemo(() => {
           if (!document) {
@@ -482,7 +919,7 @@ export const getCustomizableFormEmbeddableFactory = ({
               </EuiOverlayMask>
             ) : null}
 
-            <div style={{ width: '100%' }}>
+            <div style={{ width: '100%' }} ref={rowPickerScopeRef}>
               <CustomizableFormPreview
                 config={document.formConfig}
                 fieldValues={fieldValues}
@@ -491,6 +928,9 @@ export const getCustomizableFormEmbeddableFactory = ({
                 onSubmit={handleSubmit}
                 validationByFieldId={fieldValidationById}
                 isSubmitting={connectorExecution.isExecuting}
+                enableRowPicker={document.formConfig.allowRowPicker === true}
+                onRowPickerClick={handleRowPickerClick}
+                isRowPickerActive={isRowPickerActive}
               />
               <EuiSpacer size="s" />
             </div>

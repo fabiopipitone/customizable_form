@@ -48,6 +48,37 @@ Every release package includes a Plugin version (X.Y.Z) and a Kibana version (A.
 `./bin/kibana-plugin install file:///path/to/customizableForm-X.Y.Z_A.B.C.zip`
 - restart Kibana
 
+### Role settings
+
+To allow a user to fully interact with the plugin, you must grant permissions for both the **Customizable Form** and **Actions and Connectors** features.
+![cf_grants](docs/cf_grants.png)
+
+This can be achieved, for example, by creating a role with the following configuration and assigning it to the user:
+
+```
+PUT /_security/role/cf_user
+{
+  "applications": [
+    {
+      "application": "kibana-.kibana",
+      "privileges": [
+        "feature_dashboard_v2.read",
+        "feature_customizableForm.read",
+        "feature_actions.all"
+      ],
+      "resources": [
+        "space:default"
+      ]
+    }
+  ]
+}
+```
+
+If a user only needs to *view* the form within a dashboard without the ability to interact with it (simply to avoid dysplaing the error in the visualization when that user access the dashboard), the **"feature_actions.all"** grant can be removed.
+
+Additionally, depending on the connector linked to the form, you might need to assign further permissions.  
+For instance, if the form uses an **Index Connector** that indexes a document into an Elasticsearch index, the user must also have the `create_doc` privilege on the target index.
+
 ---
 
 ## Structured connector payloads
