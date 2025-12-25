@@ -111,11 +111,12 @@ describe('serialization', () => {
     const roundTrip = deserializeFormConfig(serializeFormConfig(config));
     expect(roundTrip).toEqual({
       ...config,
+      allowRowPicker: false,
       layoutColumns: config.layoutColumns,
       fields: [
-        { ...config.fields[0], size: { min: 5, max: 10 } },
-        { ...config.fields[1], size: { min: 0, max: 100 } },
-        { ...config.fields[2], size: undefined },
+        { ...config.fields[0], placeholder: undefined, size: { min: 5, max: 10 } },
+        { ...config.fields[1], placeholder: undefined, size: { min: 0, max: 100 } },
+        { ...config.fields[2], placeholder: undefined, size: undefined },
       ],
     });
   });

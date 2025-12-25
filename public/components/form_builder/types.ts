@@ -35,6 +35,7 @@ export interface FormConfig {
   showDescription: boolean;
   layoutColumns: number;
   requireConfirmationOnSubmit: boolean;
+  allowRowPicker?: boolean;
   connectors: FormConnectorConfig[];
   fields: FormFieldConfig[];
 }

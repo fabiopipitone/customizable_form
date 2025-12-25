@@ -2,13 +2,17 @@ import React from 'react';
 import { i18n } from '@kbn/i18n';
 import {
   EuiButton,
+  EuiButtonIcon,
   EuiEmptyPrompt,
   EuiFieldText,
   EuiForm,
   EuiFormRow,
+  EuiFlexGroup,
+  EuiFlexItem,
   EuiSpacer,
   EuiText,
   EuiTextArea,
+  EuiToolTip,
   EuiTitle,
 } from '@elastic/eui';
 import { css } from '@emotion/react';
@@ -97,6 +101,9 @@ export interface CustomizableFormPreviewProps {
   onSubmit: () => void;
   validationByFieldId?: Record<string, FieldValidationResult>;
   isSubmitting?: boolean;
+  enableRowPicker?: boolean;
+  onRowPickerClick?: () => void;
+  isRowPickerActive?: boolean;
 }
 
 export interface FieldValidationResult {
@@ -175,6 +182,9 @@ export const CustomizableFormPreview = ({
   onSubmit,
   validationByFieldId,
   isSubmitting = false,
+  enableRowPicker = false,
+  onRowPickerClick,
+  isRowPickerActive = false,
 }: CustomizableFormPreviewProps) => {
   const hasFields = config.fields.length > 0;
   const rawColumns =
@@ -307,17 +317,48 @@ export const CustomizableFormPreview = ({
 
           <EuiSpacer size="m" />
 
-          <EuiButton
-            fill
-            iconType="play"
-            onClick={onSubmit}
-            disabled={isSubmitDisabled || isSubmitting}
-            isLoading={isSubmitting}
-          >
-            {i18n.translate('customizableForm.builder.previewSubmitButton', {
-              defaultMessage: 'Submit',
-            })}
-          </EuiButton>
+          <EuiFlexGroup gutterSize="s" alignItems="center">
+            <EuiFlexItem grow={false}>
+              <EuiButton
+                fill
+                iconType="play"
+                onClick={onSubmit}
+                disabled={isSubmitDisabled || isSubmitting}
+                isLoading={isSubmitting}
+              >
+                {i18n.translate('customizableForm.builder.previewSubmitButton', {
+                  defaultMessage: 'Submit',
+                })}
+              </EuiButton>
+            </EuiFlexItem>
+
+            {enableRowPicker ? (
+              <EuiFlexItem grow={false}>
+                <EuiToolTip
+                  content={
+                    isRowPickerActive
+                      ? i18n.translate('customizableForm.builder.rowPickerActiveHelp', {
+                          defaultMessage: 'Click a row action in a Lens data table to pre-fill fields, or click again to cancel.',
+                        })
+                      : i18n.translate('customizableForm.builder.rowPickerHelp', {
+                          defaultMessage: 'Pick a row from a Lens data table to pre-fill fields.',
+                        })
+                  }
+                >
+                  <EuiButtonIcon
+                    display="fill"
+                    color={isRowPickerActive ? 'primary' : 'text'}
+                    iconType={isRowPickerActive ? 'pinFilled' : 'pin'}
+                    aria-label={i18n.translate('customizableForm.builder.rowPickerAria', {
+                      defaultMessage: 'Start row picker',
+                    })}
+                    onClick={onRowPickerClick}
+                    isSelected={isRowPickerActive}
+                  />
+                </EuiToolTip>
+              </EuiFlexItem>
+            ) : null}
+          </EuiFlexGroup>
         </EuiForm>
       ) : (
         <EuiEmptyPrompt

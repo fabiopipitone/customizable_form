@@ -1,4 +1,5 @@
 import { CustomizableFormPlugin } from './plugin';
+import './row_picker.scss';
 
 // This exports static code and TypeScript types,
 // as well as, Kibana Platform `plugin()` initializer.

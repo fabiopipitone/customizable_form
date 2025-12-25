@@ -1,10 +1,34 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
-import { BehaviorSubject } from 'rxjs';
+import { BehaviorSubject, of } from 'rxjs';
+import { buildDataTableRecord } from '@kbn/discover-utils';
 import { CustomizableFormPreview } from '../../components/form_builder/preview';
 import { getCustomizableFormEmbeddableFactory } from '../customizable_form_embeddable';
 import type { SerializedFormConfig } from '../../components/form_builder/serialization';
+import {
+  registerRowPickerScope,
+  startRowPickerSession,
+  unregisterRowPickerScope,
+} from '../../services/row_picker';
+
+let latestPreviewProps: any;
+
+jest.mock('@kbn/discover-utils', () => {
+  return {
+    buildDataTableRecord: jest.fn(),
+  };
+});
+
+jest.mock('@kbn/es-query', () => {
+  return {
+    buildEsQuery: jest.fn(() => ({ bool: { filter: [] } })),
+    buildCustomFilter: jest.fn(() => ({})),
+    FilterStateStore: { APP_STATE: 'appState' },
+    COMPARE_ALL_OPTIONS: {},
+    onlyDisabledFiltersChanged: jest.fn(() => true),
+  };
+});
 
 jest.mock('../../services/persistence', () => ({
   resolveCustomizableForm: jest.fn().mockResolvedValue({
@@ -30,8 +54,25 @@ jest.mock('../../services/persistence', () => ({
   })),
 }));
 
-jest.mock('../../components/form_builder/preview', () => ({
-  CustomizableFormPreview: jest.fn(() => <div data-test-subj="preview">Preview</div>),
+jest.mock('../../components/form_builder/preview', () => {
+  const actual = jest.requireActual('../../components/form_builder/preview');
+  return {
+    ...actual,
+    CustomizableFormPreview: jest.fn((props) => {
+      latestPreviewProps = props;
+      return <div data-test-subj="preview">Preview</div>;
+    }),
+  };
+});
+
+jest.mock('../../services/row_picker', () => ({
+  registerRowPickerScope: jest.fn(),
+  unregisterRowPickerScope: jest.fn(),
+  startRowPickerSession: jest.fn().mockResolvedValue({
+    data: { rowIndex: 0, table: { rows: [], columns: [] } },
+  }),
+  cancelRowPickerSession: jest.fn(),
+  isCellActionContext: (context: { data?: unknown }) => Array.isArray(context.data),
 }));
 
 const SERIALIZED_FORM: SerializedFormConfig = {
@@ -54,12 +95,24 @@ const SERIALIZED_FORM: SerializedFormConfig = {
   fields: [],
 };
 
-const createEmbeddable = async (overrides?: Partial<SerializedFormConfig>) => {
+const createEmbeddable = async (
+  overrides?: Partial<SerializedFormConfig>,
+  options?: { data?: any }
+) => {
+  const toasts = {
+    addDanger: jest.fn(),
+    addWarning: jest.fn(),
+    addSuccess: jest.fn(),
+  };
   const factory = getCustomizableFormEmbeddableFactory({
     coreStart: {
       http: {} as any,
-      notifications: { toasts: { addDanger: jest.fn(), addWarning: jest.fn(), addSuccess: jest.fn() } } as any,
+      notifications: { toasts } as any,
+      uiSettings: { get: jest.fn() } as any,
     } as any,
+    pluginsStart: {
+      data: options?.data,
+    },
   });
 
   const phase$ = new BehaviorSubject('bootstrap');
@@ -86,10 +139,27 @@ const createEmbeddable = async (overrides?: Partial<SerializedFormConfig>) => {
     uuid: 'test-embeddable',
   });
 
-  return { Component, phase$ };
+  return { Component, phase$, toasts };
 };
 
 describe('customizable form embeddable', () => {
+  beforeEach(() => {
+    latestPreviewProps = undefined;
+    jest.clearAllMocks();
+    (buildDataTableRecord as jest.Mock).mockReturnValue({
+      id: 'doc-1',
+      raw: {},
+      flattened: {},
+    });
+    (CustomizableFormPreview as jest.Mock).mockImplementation((props) => {
+      latestPreviewProps = props;
+      return <div data-test-subj="preview">Preview</div>;
+    });
+    (startRowPickerSession as jest.Mock).mockResolvedValue({
+      data: { rowIndex: 0, table: { rows: [], columns: [] } },
+    });
+  });
+
   it('renders preview after loading state', async () => {
     const { Component, phase$ } = await createEmbeddable();
     const { unmount } = render(<Component />);
@@ -99,9 +169,10 @@ describe('customizable form embeddable', () => {
   });
 
   it('shows confirmation modal when requireConfirmationOnSubmit is true', async () => {
-    (CustomizableFormPreview as jest.Mock).mockImplementation(({ onSubmit }) => (
-      <button onClick={onSubmit}>Submit</button>
-    ));
+    (CustomizableFormPreview as jest.Mock).mockImplementation((props) => {
+      latestPreviewProps = props;
+      return <button onClick={props.onSubmit}>Submit</button>;
+    });
 
     const { Component, phase$ } = await createEmbeddable({ requireConfirmationOnSubmit: true });
     const { unmount } = render(<Component />);
@@ -111,4 +182,140 @@ describe('customizable form embeddable', () => {
     unmount();
     phase$.complete();
   });
+
+  it('registers and unregisters row picker scope when enabled', async () => {
+    const { Component, phase$ } = await createEmbeddable({ allowRowPicker: true });
+    const { unmount } = render(
+      <div className="dshDashboardViewport">
+        <Component />
+      </div>
+    );
+
+    expect(registerRowPickerScope).toHaveBeenCalledTimes(1);
+    expect(registerRowPickerScope).toHaveBeenCalledWith(expect.any(HTMLElement));
+
+    unmount();
+    expect(unregisterRowPickerScope).toHaveBeenCalledTimes(1);
+    phase$.complete();
+  });
+
+  it('starts row picker session with the scoped element', async () => {
+    (CustomizableFormPreview as jest.Mock).mockImplementation((props) => {
+      latestPreviewProps = props;
+      return (
+        <button onClick={props.onRowPickerClick} disabled={!props.enableRowPicker}>
+          Pin
+        </button>
+      );
+    });
+
+    const { Component, phase$ } = await createEmbeddable({ allowRowPicker: true });
+    const { unmount } = render(
+      <div className="dshDashboardViewport">
+        <Component />
+      </div>
+    );
+
+    fireEvent.click(await screen.findByText('Pin'));
+
+    expect(startRowPickerSession).toHaveBeenCalledTimes(1);
+    expect(startRowPickerSession).toHaveBeenCalledWith(expect.any(HTMLElement));
+
+    unmount();
+    phase$.complete();
+  });
+
+  it('prefills fields from saved search _id cell action', async () => {
+    (CustomizableFormPreview as jest.Mock).mockImplementation((props) => {
+      latestPreviewProps = props;
+      return (
+        <button onClick={props.onRowPickerClick} disabled={!props.enableRowPicker}>
+          Pin
+        </button>
+      );
+    });
+
+    const dataView = {
+      id: 'data-view-1',
+      getIndexPattern: () => 'logs-*',
+      getComputedFields: () => ({ scriptFields: {}, runtimeFields: {}, docvalueFields: [] }),
+    };
+
+    const data = {
+      search: {
+        search: jest.fn(() =>
+          of({
+            rawResponse: {
+              hits: {
+                hits: [{ _id: 'abc', _index: 'logs-1' }, { _id: 'abc', _index: 'logs-2' }],
+              },
+            },
+          })
+        ),
+      },
+      query: {
+        timefilter: {
+          timefilter: {
+            createFilter: jest.fn(() => null),
+          },
+        },
+      },
+    };
+
+    (buildDataTableRecord as jest.Mock).mockReturnValue({
+      id: 'doc-1',
+      raw: {},
+      flattened: {
+        Carrier: ['JetBeats'],
+      },
+    });
+
+    (startRowPickerSession as jest.Mock).mockResolvedValue({
+      data: [{ field: { name: '_id' }, value: 'abc' }],
+      metadata: { dataView },
+    });
+
+    const { Component, phase$, toasts } = await createEmbeddable(
+      {
+        allowRowPicker: true,
+        fields: [
+          {
+            id: 'field-1',
+            key: 'carrier',
+            label: 'Carrier',
+            type: 'text',
+            required: true,
+            dataType: 'string',
+          },
+          {
+            id: 'field-2',
+            key: 'dest',
+            label: 'DestAirportID',
+            type: 'text',
+            required: true,
+            dataType: 'string',
+          },
+        ],
+      },
+      { data }
+    );
+    const { unmount } = render(<Component />);
+
+    fireEvent.click(await screen.findByText('Pin'));
+
+    await waitFor(() => {
+      expect(latestPreviewProps.fieldValues).toEqual({
+        'field-1': 'JetBeats',
+        'field-2': '',
+      });
+    });
+
+    const warningTitles = toasts.addWarning.mock.calls.map(([call]) => call?.title);
+    expect(warningTitles).toContain('Some required fields are missing');
+    expect(warningTitles).toContain('Multiple documents found');
+
+    unmount();
+    phase$.complete();
+  });
+
 });
