@@ -131,6 +131,37 @@ Invalid structures surface directly in the Payload tab and block both Save and S
 
 ---
 
+## Row Picker
+
+Starting from version 1.0.1 of Customizable Form, the Row Picker feature is available.
+It can be enabled from the General section in Edit mode, by turning on the toggle.
+
+When enabled, a Pin icon will appear next to the Submit button. By clicking it, you can directly copy the values of a table row into the form fields, without having to type them manually.
+
+The match between the value to insert and the form field is performed between the table column name and the form field label name, and it is case sensitive.
+All form fields whose labels match one of the column names of the selected table will be filled automatically.
+
+If a Required field in the form is not present among the table columns, a warning toast will be displayed.
+
+The feature works with both Lens Data Tables and Saved Searches, with the following differences:
+
+### Lens Data Table
+
+When clicking the Pin icon, an additional column (last column) appears in the table, represented by 3 dots. This is an Action column.
+Simply click the 3 dots of a row to copy that row’s values into the form where the Pin icon was clicked.
+
+### Saved Search
+
+Since a Saved Search does not expose an external Trigger Action, it is necessary that the Saved Search contains the _id column with the document identifier.
+
+When clicking the Pin icon on a form, a pulse/glow effect is applied to the _id column to highlight it.
+To copy the values of a row, click the Action button of the _id cell of the desired row and select “Use row values”.
+
+It is important to note that, in the case of Saved Search, the _id in that cell is used to query the Data View on which the Saved Search is based. However, since a Data View may cover multiple indices and there may potentially be different documents with the same _id across different indices, if this happens, the values used to populate the form fields will come from the first returned document, and a warning toast will notify that a collision occurred.
+
+![row_picker_demo](docs/row_picker_demo.gif)
+---
+
 ## Development & Contribution
 
 ### Environment requirements
